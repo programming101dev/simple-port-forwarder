@@ -18,11 +18,13 @@
  */
 
 #include "convert.h"
+#include "server.h"
+#include <p101_c/p101_string.h>
+#include <p101_posix/p101_signal.h>
 #include <p101_posix/p101_unistd.h>
-#include <stdint.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -37,35 +39,22 @@ struct arguments
     bool  very_verbose;
 };
 
-struct settings
-{
-    int                     backlog;
-    struct sockaddr_storage addr_in;
-    in_port_t               port_in;
-    struct sockaddr_storage addr_out;
-    in_port_t               port_out;
-    bool                    verbose;
-    bool                    very_verbose;
-};
-
 static void           parse_arguments(const struct p101_env *env, int argc, char *argv[], struct arguments *args);
 static void           check_arguments(const struct p101_env *env, const char *binary_name, const struct arguments *args);
-static void           convert_arguments(const struct p101_env *env, struct p101_error *error, const struct arguments *args, struct settings *sets);
+static void           convert_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args, struct settings *sets);
 _Noreturn static void usage(const struct p101_env *env, const char *program_name, int exit_code, const char *message);
 
 #define UNKNOWN_OPTION_MESSAGE_LEN 24
 
 int main(int argc, char *argv[])
 {
-    struct p101_error *error;
+    struct p101_error *err;
     struct p101_env   *env;
-    struct arguments   args;
-    struct settings    sets;
+    struct arguments   args = {0};
+    struct settings    sets = {0};
 
-    error = p101_error_create(false);
-    env   = p101_env_create(error, true, NULL);
-    memset(&args, 0, sizeof(args));
-    memset(&sets, 0, sizeof(sets));
+    err = p101_error_create(false);
+    env = p101_env_create(err, true, NULL);
     parse_arguments(env, argc, argv, &args);
 
     if(args.verbose || args.very_verbose)
@@ -74,17 +63,20 @@ int main(int argc, char *argv[])
     }
 
     check_arguments(env, argv[0], &args);
-    convert_arguments(env, error, &args, &sets);
+    convert_arguments(env, err, &args, &sets);
 
-    if(p101_error_has_error(error))
+    if(p101_error_has_error(err))
     {
-        fprintf(stderr, "Error: %s\n", p101_error_get_message(error));
-        exit(EXIT_FAILURE);
+        goto error;
     }
 
-    printf("Starting port forwarder %s:%d -> %s:%d\n", args.ip_address_in, sets.port_in, args.ip_address_out, sets.port_out);
+    run_server(env, err, &sets);
 
     return EXIT_SUCCESS;
+
+error:
+    fprintf(stderr, "Error: %s\n", p101_error_get_message(err));
+    exit(EXIT_FAILURE);
 }
 
 static void parse_arguments(const struct p101_env *env, int argc, char *argv[], struct arguments *args)

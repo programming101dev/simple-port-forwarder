@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(server
+project(simple-port-forwarder
         VERSION 0.0.1
         DESCRIPTION ""
         LANGUAGES C)
@@ -13,20 +13,24 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/src/main.c)
 list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/src/convert.c)
+list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/src/server.c)
 list(APPEND HEADERS ${CMAKE_SOURCE_DIR}/include/convert.h)
+list(APPEND HEADERS ${CMAKE_SOURCE_DIR}/include/server.h)
 
-set(server_SOURCES
+set(simple-port-forwarder_SOURCES
     ${CMAKE_SOURCE_DIR}/src/main.c
     ${CMAKE_SOURCE_DIR}/src/convert.c
+    ${CMAKE_SOURCE_DIR}/src/server.c
 )
 
-set(server_HEADERS
+set(simple-port-forwarder_HEADERS
     ${CMAKE_SOURCE_DIR}/include/convert.h
+    ${CMAKE_SOURCE_DIR}/include/server.h
 )
 
-add_executable(server ${server_SOURCES})
-target_include_directories(server PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_include_directories(server PRIVATE /usr/local/include)
+add_executable(simple-port-forwarder ${simple-port-forwarder_SOURCES})
+target_include_directories(simple-port-forwarder PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(simple-port-forwarder PRIVATE /usr/local/include)
 
 # Check if the system uses 64-bit libraries
 get_property(LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS)
@@ -38,11 +42,12 @@ else()
     set(LIBSUFFIX "")
 endif()
 
-target_link_directories(server PRIVATE /usr/local/lib${LIBSUFFIX})
+target_link_directories(simple-port-forwarder PRIVATE /usr/local/lib${LIBSUFFIX})
 
-target_link_libraries(server PRIVATE p101_env)
-target_link_libraries(server PRIVATE p101_error)
-target_link_libraries(server PRIVATE p101_posix)
+target_link_libraries(simple-port-forwarder PRIVATE p101_env)
+target_link_libraries(simple-port-forwarder PRIVATE p101_error)
+target_link_libraries(simple-port-forwarder PRIVATE p101_c)
+target_link_libraries(simple-port-forwarder PRIVATE p101_posix)
 
 message("C Compiler: ${CMAKE_C_COMPILER}")
 get_filename_component(COMPILER_NAME "${CMAKE_C_COMPILER}" NAME_WE)
@@ -74,16 +79,16 @@ set(STANDARD_FLAGS
     -Werror
 )
 
-# Set compiler flags for the target server
-target_compile_options(server PRIVATE
+# Set compiler flags for the target simple-port-forwarder
+target_compile_options(simple-port-forwarder PRIVATE
     ${STANDARD_FLAGS}
     ${WARNING_FLAGS_LIST}
     ${ANALYZER_FLAGS_LIST}
     ${DEBUG_FLAGS_LIST}
     ${SANITIZER_FLAGS_LIST}
 )
-# Add target_link_libraries for server
-target_link_libraries(server PRIVATE ${SANITIZER_FLAGS_STRING})
+# Add target_link_libraries for simple-port-forwarder
+target_link_libraries(simple-port-forwarder PRIVATE ${SANITIZER_FLAGS_STRING})
 
 if (NOT DEFINED CLANG_FORMAT_NAME)
     set(CLANG_FORMAT_NAME "clang-format")
@@ -107,10 +112,10 @@ add_custom_target(format
     COMMENT "Running clang-format"
 )
 
-add_dependencies(server format)
+add_dependencies(simple-port-forwarder format)
 
 add_custom_command(
-    TARGET server POST_BUILD
+    TARGET simple-port-forwarder POST_BUILD
     COMMAND ${CLANG_TIDY} ${SOURCES} ${HEADERS} -quiet --warnings-as-errors='*' -checks=*,-llvmlibc-restrict-system-libc-headers,-altera-struct-pack-align,-readability-identifier-length,-altera-unroll-loops,-cppcoreguidelines-init-variables,-cert-err33-c,-modernize-macro-to-enum,-bugprone-easily-swappable-parameters,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-altera-id-dependent-backward-branch,-concurrency-mt-unsafe,-misc-unused-parameters,-hicpp-signed-bitwise,-google-readability-todo,-cert-msc30-c,-cert-msc50-cpp,-readability-function-cognitive-complexity,-clang-analyzer-security.insecureAPI.strcpy,-cert-env33-c,-android-cloexec-accept,-clang-analyzer-security.insecureAPI.rand,-misc-include-cleaner,-llvm-header-guard -- ${STANDARD_FLAGS} -I${CMAKE_SOURCE_DIR}/include -I/usr/local/include
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running clang-tidy"
@@ -119,7 +124,7 @@ add_custom_command(
 if (CMAKE_C_COMPILER MATCHES ".*/clang.*")
     # Add a custom target for clang --analyze
     add_custom_command(
-        TARGET server POST_BUILD
+        TARGET simple-port-forwarder POST_BUILD
         COMMAND ${CMAKE_C_COMPILER} --analyzer-output text --analyze -Xclang -analyzer-checker=core --analyze -Xclang -analyzer-checker=deadcode -Xclang -analyzer-checker=security -Xclang -analyzer-disable-checker=security.insecureAPI.DeprecatedOrUnsafeBufferHandling -Xclang -analyzer-checker=unix -Xclang -analyzer-checker=unix ${CMAKE_C_FLAGS} ${STANDARD_FLAGS} -I${CMAKE_SOURCE_DIR}/include -I/usr/local/include ${SOURCES} ${HEADERS}
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Running clang --analyze"
@@ -127,14 +132,14 @@ if (CMAKE_C_COMPILER MATCHES ".*/clang.*")
 
     # Add a custom command to delete .gch files after the analysis
     add_custom_command(
-        TARGET server POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_SOURCE_DIR}/*.gch
+        TARGET simple-port-forwarder POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E remove ${CMAKE_SOURCE_DIR}/include/*.gch
         COMMENT "Removing .gch files"
     )
 endif ()
 
 add_custom_command(
-    TARGET server POST_BUILD
+    TARGET simple-port-forwarder POST_BUILD
     COMMAND ${CPPCHECK} --error-exitcode=1 --force --quiet --inline-suppr --library=posix --enable=all --suppress=missingIncludeSystem --suppress=unusedFunction --suppress=unmatchedSuppression --suppress=checkersReport -I${CMAKE_SOURCE_DIR}/include -I/usr/local/include ${SOURCES} ${HEADERS}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running cppcheck"
