@@ -1,1 +1,1 @@
-simple-port-forwarder src/main.c src/convert.c src/server.c include/convert.h include/server.h p101_env p101_error p101_c p101_posix
+simple-port-forwarder src/main.c src/convert.c src/server.c include/convert.h include/server.h p101_env p101_error p101_c p101_posix p101_fsm

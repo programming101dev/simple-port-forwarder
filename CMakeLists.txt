@@ -48,6 +48,7 @@ target_link_libraries(simple-port-forwarder PRIVATE p101_env)
 target_link_libraries(simple-port-forwarder PRIVATE p101_error)
 target_link_libraries(simple-port-forwarder PRIVATE p101_c)
 target_link_libraries(simple-port-forwarder PRIVATE p101_posix)
+target_link_libraries(simple-port-forwarder PRIVATE p101_fsm)
 
 message("C Compiler: ${CMAKE_C_COMPILER}")
 get_filename_component(COMPILER_NAME "${CMAKE_C_COMPILER}" NAME_WE)

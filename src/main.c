@@ -72,6 +72,12 @@ int main(int argc, char *argv[])
     }
 
     run_server(env, err, &sets);
+
+    if(p101_error_has_error(err))
+    {
+        goto error;
+    }
+
     exit_code = EXIT_SUCCESS;
     goto done;
 
