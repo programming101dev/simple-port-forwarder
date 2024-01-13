@@ -52,6 +52,7 @@ int main(int argc, char *argv[])
     struct p101_env   *env;
     struct arguments   args = {0};
     struct settings    sets = {0};
+    int                exit_code;
 
     err = p101_error_create(false);
     env = p101_env_create(err, true, NULL);
@@ -71,12 +72,19 @@ int main(int argc, char *argv[])
     }
 
     run_server(env, err, &sets);
-
-    return EXIT_SUCCESS;
+    exit_code = EXIT_SUCCESS;
+    goto done;
 
 error:
     fprintf(stderr, "Error: %s\n", p101_error_get_message(err));
-    exit(EXIT_FAILURE);
+    exit_code = EXIT_FAILURE;
+
+done:
+    p101_error_reset(err);
+    free(env);
+    free(err);
+
+    return exit_code;
 }
 
 static void parse_arguments(const struct p101_env *env, int argc, char *argv[], struct arguments *args)
