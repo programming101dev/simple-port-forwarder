@@ -20,7 +20,19 @@ void run_server(const struct p101_env *env, struct p101_error *err, const struct
 
     P101_TRACE(env);
     sockaddr_to_string(env, err, &sets->addr_in, ip_in_str, INET6_ADDRSTRLEN);
+
+    if(p101_error_has_error(err))
+    {
+        goto error;
+    }
+
     sockaddr_to_string(env, err, &sets->addr_out, ip_out_str, INET6_ADDRSTRLEN);
+
+    if(p101_error_has_error(err))
+    {
+        goto error;
+    }
+
     printf("Starting port forwarder %s:%d -> %s:%d\n", ip_in_str, sets->port_in, ip_out_str, sets->port_out);
     setup_signal_handler(env, err);
 
