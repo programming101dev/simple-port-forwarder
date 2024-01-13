@@ -18,6 +18,6 @@ struct settings
     bool                    very_verbose;
 };
 
-void run_server(const struct p101_env *env, struct p101_error *err, const struct settings *sets);
+void run_server(const struct p101_env *env, struct p101_error *err, struct settings *sets);
 
 #endif    // SERVER_SERVER_H
