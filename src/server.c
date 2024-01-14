@@ -194,7 +194,7 @@ static p101_fsm_state_t socket_create(const struct p101_env *env, struct p101_er
     p101_fsm_state_t    next_state;
 
     P101_TRACE(env);
-    data                = arg;
+    data                = (struct server_data *)arg;
     data->server_socket = p101_socket(env, err, data->sets->addr_in.ss_family, SOCK_STREAM, 0);
 
     if(p101_error_has_error(err))
@@ -217,7 +217,7 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
     p101_fsm_state_t    next_state;
 
     P101_TRACE(env);
-    data = arg;
+    data = (struct server_data *)arg;
 
     net_port = htons(data->sets->port_in);
 
@@ -265,7 +265,7 @@ static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_er
     const struct server_data *data;
 
     P101_TRACE(env);
-    data = arg;
+    data = (struct server_data *)arg;
 
     if(data->sets->verbose)
     {
@@ -282,7 +282,7 @@ static p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_er
     const struct server_data *data;
 
     P101_TRACE(env);
-    data = arg;
+    data = (struct server_data *)arg;
 
     if(data->sets->verbose)
     {
@@ -299,7 +299,7 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
     const struct server_data *data;
 
     P101_TRACE(env);
-    data = arg;
+    data = (struct server_data *)arg;
 
     if(data->sets->verbose)
     {
@@ -316,7 +316,7 @@ static p101_fsm_state_t handle_error(const struct p101_env *env, struct p101_err
     const struct server_data *data;
 
     P101_TRACE(env);
-    data = arg;
+    data = (struct server_data *)arg;
 
     if(data->sets->verbose)
     {
@@ -333,7 +333,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
     const struct server_data *data;
 
     P101_TRACE(env);
-    data = arg;
+    data = (struct server_data *)arg;
 
     if(data->server_socket != -1)
     {
