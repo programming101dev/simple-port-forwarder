@@ -23,6 +23,10 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
 
 static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+#ifndef BUFFER_LEN
+    #define BUFFER_LEN ((size_t)1024 * (size_t)10)
+#endif
+
 enum server_states
 {
     SOCKET = P101_FSM_USER_START,    // 2
@@ -38,7 +42,7 @@ struct server_data
 {
     struct settings *sets;
     int              server_socket;
-    //    int                    client_socket;
+    int              client_socket;
 };
 
 void run_server(const struct p101_env *env, struct p101_error *err, struct settings *sets)
@@ -64,6 +68,7 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
         {ACCEPT,        HANDLE,        handle_connection},
         {ACCEPT,        CLEANUP,       cleanup          },
         {ACCEPT,        ERROR,         handle_error     },
+        {HANDLE,        HANDLE,        socket_accept    },
         {HANDLE,        ACCEPT,        socket_accept    },
         {HANDLE,        CLEANUP,       cleanup          },
         {HANDLE,        ERROR,         handle_error     },
@@ -260,55 +265,80 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
     return next_state;
 }
 
-static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *err, void *arg)
-{
-    const struct server_data *data;
-
-    P101_TRACE(env);
-    data = (struct server_data *)arg;
-
-    if(data->sets->verbose)
-    {
-        printf("accept");
-    }
-
-    P101_ERROR_RAISE_USER(err, "accept", 0);
-
-    return ERROR;
-}
-
 static p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     const struct server_data *data;
+    p101_fsm_state_t          next_state;
 
     P101_TRACE(env);
     data = (struct server_data *)arg;
+    p101_listen(env, err, data->server_socket, data->sets->backlog);
 
-    if(data->sets->verbose)
+    if(p101_error_has_error(err))
     {
-        printf("accept");
+        next_state = ERROR;
+    }
+    else
+    {
+        next_state = ACCEPT;
     }
 
-    P101_ERROR_RAISE_USER(err, "accept", 0);
+    return next_state;
+}
 
-    return ERROR;
+static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *err, void *arg)
+{
+    struct server_data *data;
+    p101_fsm_state_t    next_state;
+
+    P101_TRACE(env);
+    data                = (struct server_data *)arg;
+    data->client_socket = p101_accept(env, err, data->server_socket, NULL, 0);
+
+    if(p101_error_has_error(err))
+    {
+        next_state = ERROR;
+    }
+    else
+    {
+        next_state = HANDLE;
+    }
+
+    return next_state;
 }
 
 static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg)
 {
-    const struct server_data *data;
+    struct server_data *data;
+    uint8_t             buffer[BUFFER_LEN];
+    ssize_t             len;
+    p101_fsm_state_t    next_state;
 
     P101_TRACE(env);
     data = (struct server_data *)arg;
+    len  = p101_read(env, err, data->client_socket, buffer, BUFFER_LEN);
 
-    if(data->sets->verbose)
+    if(p101_error_has_error(err))
     {
-        printf("handle_connection");
+        next_state = ERROR;
+    }
+    else
+    {
+        p101_write(env, err, STDOUT_FILENO, buffer, (size_t)len);
+
+        if(len > 0)
+        {
+            next_state = HANDLE;
+        }
+        else
+        {
+            next_state = ACCEPT;
+            p101_close(env, err, data->client_socket);
+            data->client_socket = -1;
+        }
     }
 
-    P101_ERROR_RAISE_USER(err, "handle_connection", 0);
-
-    return ERROR;
+    return next_state;
 }
 
 static p101_fsm_state_t handle_error(const struct p101_env *env, struct p101_error *err, void *arg)
@@ -330,7 +360,7 @@ static p101_fsm_state_t handle_error(const struct p101_env *env, struct p101_err
 
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
 {
-    const struct server_data *data;
+    struct server_data *data;
 
     P101_TRACE(env);
     data = (struct server_data *)arg;
@@ -338,6 +368,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
     if(data->server_socket != -1)
     {
         p101_close(env, err, data->server_socket);
+        data->server_socket = -1;
     }
 
     return P101_FSM_EXIT;
