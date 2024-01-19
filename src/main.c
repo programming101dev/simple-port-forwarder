@@ -256,7 +256,7 @@ _Noreturn static void usage(const struct p101_env *env, const char *program_name
             "<ip address> -P <port>\n",
             program_name);
     fputs("Options:\n", stderr);
-    fputs("  -h  Display this help message\n", stderr);
+    fputs("  -h Display this help message\n", stderr);
     fputs("  -b <backlog> the backlog\n", stderr);
     fputs("  -a <listening ip address> the ip address to listen to\n", stderr);
     fputs("  -p <listening port> the port to listen to\n", stderr);

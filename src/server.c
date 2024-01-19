@@ -3,6 +3,7 @@
 #include <p101_c/p101_string.h>
 #include <p101_fsm/fsm.h>
 #include <p101_posix/arpa/p101_inet.h>
+#include <p101_posix/p101_pthread.h>
 #include <p101_posix/p101_signal.h>
 #include <p101_posix/p101_unistd.h>
 #include <p101_posix/sys/p101_socket.h>
@@ -18,6 +19,8 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
 static p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg);
+static void            *copy_handler(void *arg);
+static ssize_t          copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd);
 static p101_fsm_state_t handle_error(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
 
@@ -43,6 +46,15 @@ struct server_data
     struct settings *sets;
     int              server_socket;
     int              client_socket;
+    int              forward_socket;
+};
+
+struct copy_data
+{
+    struct p101_error     *err;
+    const struct p101_env *env;
+    int                    to_fd;
+    int                    from_fd;
 };
 
 void run_server(const struct p101_env *env, struct p101_error *err, struct settings *sets)
@@ -68,7 +80,6 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
         {ACCEPT,        HANDLE,        handle_connection},
         {ACCEPT,        CLEANUP,       cleanup          },
         {ACCEPT,        ERROR,         handle_error     },
-        {HANDLE,        HANDLE,        socket_accept    },
         {HANDLE,        ACCEPT,        socket_accept    },
         {HANDLE,        CLEANUP,       cleanup          },
         {HANDLE,        ERROR,         handle_error     },
@@ -78,6 +89,7 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     struct server_data data;
 
     P101_TRACE(env);
+    // TODO: move to convert.c
     sockaddr_to_string(env, err, &sets->addr_in, ip_in_str, INET6_ADDRSTRLEN);
 
     if(p101_error_has_error(err))
@@ -222,8 +234,7 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
     p101_fsm_state_t    next_state;
 
     P101_TRACE(env);
-    data = (struct server_data *)arg;
-
+    data     = (struct server_data *)arg;
     net_port = htons(data->sets->port_in);
 
     if(data->sets->addr_in.ss_family == AF_INET)
@@ -245,7 +256,7 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
     else
     {
         P101_ERROR_RAISE_USER(err, "Internal error: addr->ss_family must be AF_INET or AF_INET6", 1);
-        addr_len = 0;
+        goto error;
     }
 
     if(p101_error_has_no_error(err))
@@ -255,13 +266,16 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
 
     if(p101_error_has_error(err))
     {
-        next_state = ERROR;
-    }
-    else
-    {
-        next_state = LISTEN;
+        goto error;
     }
 
+    next_state = LISTEN;
+    goto done;
+
+error:
+    next_state = ERROR;
+
+done:
     return next_state;
 }
 
@@ -310,38 +324,131 @@ static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_er
 static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     struct server_data *data;
-    uint8_t             buffer[BUFFER_LEN];
-    ssize_t             len;
     p101_fsm_state_t    next_state;
+    socklen_t           addr_len;
+    in_port_t           net_port;
 
     P101_TRACE(env);
-    data = (struct server_data *)arg;
-    len  = p101_read(env, err, data->client_socket, buffer, BUFFER_LEN);
+    data                 = (struct server_data *)arg;
+    data->forward_socket = p101_socket(env, err, data->sets->addr_in.ss_family, SOCK_STREAM, 0);
+    net_port             = htons(data->sets->port_out);
 
-    if(p101_error_has_error(err))
+    if(data->sets->addr_in.ss_family == AF_INET)
     {
-        next_state = ERROR;
+        struct sockaddr_in *ipv4_addr;
+
+        ipv4_addr           = (struct sockaddr_in *)&data->sets->addr_out;
+        addr_len            = sizeof(*ipv4_addr);
+        ipv4_addr->sin_port = net_port;
+    }
+    else if(data->sets->addr_in.ss_family == AF_INET6)
+    {
+        struct sockaddr_in6 *ipv6_addr;
+
+        ipv6_addr            = (struct sockaddr_in6 *)&data->sets->addr_out;
+        addr_len             = sizeof(*ipv6_addr);
+        ipv6_addr->sin6_port = net_port;
     }
     else
     {
-        p101_write(env, err, STDOUT_FILENO, buffer, (size_t)len);
-
-        if(len > 0)
-        {
-            next_state = HANDLE;
-        }
-        else
-        {
-            next_state = ACCEPT;
-            p101_close(env, err, data->client_socket);
-            data->client_socket = -1;
-        }
+        P101_ERROR_RAISE_USER(err, "Internal error: addr->ss_family must be AF_INET or AF_INET6", 1);
+        goto error;
     }
 
+    if(p101_error_has_no_error(err))
+    {
+        p101_connect(env, err, data->forward_socket, (struct sockaddr *)&data->sets->addr_out, addr_len);
+    }
+
+    if(p101_error_has_no_error(err))
+    {
+        struct copy_data to_forwarder_data;
+        pthread_t        to_forwarder;
+        struct copy_data from_forwarder_data;
+        pthread_t        from_forwarder;
+
+        to_forwarder_data.env     = env;
+        to_forwarder_data.err     = err;
+        to_forwarder_data.from_fd = data->client_socket;
+        to_forwarder_data.to_fd   = data->forward_socket;
+        p101_pthread_create(env, err, &to_forwarder, NULL, copy_handler, &to_forwarder_data);
+
+        if(p101_error_has_error(err))
+        {
+            goto error;
+        }
+
+        from_forwarder_data.env     = env;
+        from_forwarder_data.err     = err;
+        from_forwarder_data.from_fd = data->forward_socket;
+        from_forwarder_data.to_fd   = data->client_socket;
+        p101_pthread_create(env, err, &from_forwarder, NULL, copy_handler, &from_forwarder_data);
+
+        if(p101_error_has_error(err))
+        {
+            goto error;
+        }
+
+        []// wait for the threads to finish
+        p101_pthread_join(env, err, to_forwarder, NULL);
+        p101_pthread_join(env, err, from_forwarder, NULL);
+    }
+
+    if(p101_error_has_error(err))
+    {
+        goto error;
+    }
+
+    next_state = ACCEPT;
+    goto done;
+
+error:
+    next_state = ERROR;
+
+done:
     return next_state;
 }
 
-static p101_fsm_state_t handle_error(const struct p101_env *env, struct p101_error *err, void *arg)
+static void *copy_handler(void *arg)
+{
+    struct copy_data *data;
+
+    data = (struct copy_data *)arg;
+    copy(data->env, data->err, data->to_fd, data->from_fd);
+
+    return NULL;
+}
+
+static ssize_t copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd)
+{
+    uint8_t buffer[BUFFER_LEN];
+    ssize_t len;
+
+    // TODO: loop until closed
+    len = p101_read(env, err, from_fd, buffer, BUFFER_LEN);
+
+    if(p101_error_has_no_error(err))
+    {
+        if(len == 0)
+        {
+            p101_close(env, err, to_fd);
+        }
+        else
+        {
+            // TODO: handle short write
+            p101_write(env, err, to_fd, buffer, (size_t)len);
+            p101_write(env, err, STDOUT_FILENO, buffer, (size_t)len);
+        }
+    }
+    else
+    {
+        printf("Error");
+    }
+
+    return len;
+}
+
+static p101_fsm_state_t handle_error(const struct p101_env *env, struct p101_error *err, void *arg)    // cppcheck-suppress constParameterPointer
 {
     const struct server_data *data;
 
@@ -353,7 +460,10 @@ static p101_fsm_state_t handle_error(const struct p101_env *env, struct p101_err
         printf("handle_error");
     }
 
-    P101_ERROR_RAISE_USER(err, "handle_error", 0);
+    if(p101_error_has_error(err))
+    {
+        printf("there is an error");
+    }
 
     return CLEANUP;
 }
@@ -365,6 +475,8 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
     P101_TRACE(env);
     data = (struct server_data *)arg;
 
+    // TODO close client socket too
+    // TODO: is this -1 at the start?
     if(data->server_socket != -1)
     {
         p101_close(env, err, data->server_socket);
