@@ -14,6 +14,12 @@ struct settings
     in_port_t               port_in;
     struct sockaddr_storage addr_out;
     in_port_t               port_out;
+    time_t                  min_seconds;
+    time_t                  max_seconds;
+    long                    min_nanoseconds;
+    long                    max_nanoseconds;
+    unsigned int            min_bytes;
+    unsigned int            max_bytes;
     bool                    verbose;
     bool                    very_verbose;
 };

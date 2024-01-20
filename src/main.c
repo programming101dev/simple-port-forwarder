@@ -20,12 +20,9 @@
 #include "convert.h"
 #include "server.h"
 #include <p101_c/p101_string.h>
-#include <p101_posix/p101_signal.h>
 #include <p101_posix/p101_unistd.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 struct arguments
@@ -35,6 +32,12 @@ struct arguments
     char *port_in;
     char *ip_address_out;
     char *port_out;
+    char *min_seconds;
+    char *max_seconds;
+    char *min_nanoseconds;
+    char *max_nanoseconds;
+    char *min_bytes;
+    char *max_bytes;
     bool  verbose;
     bool  very_verbose;
 };
@@ -100,7 +103,7 @@ static void parse_arguments(const struct p101_env *env, int argc, char *argv[], 
     P101_TRACE(env);
     opterr = 0;
 
-    while((opt = p101_getopt(env, argc, argv, "hvVb:a:p:A:P:")) != -1)
+    while((opt = p101_getopt(env, argc, argv, "hvVl:a:p:A:P:s:S:n:N:b:B:")) != -1)
     {
         switch(opt)
         {
@@ -114,7 +117,7 @@ static void parse_arguments(const struct p101_env *env, int argc, char *argv[], 
                 args->very_verbose = true;
                 break;
             }
-            case 'b':
+            case 'l':
             {
                 args->backlog = optarg;
                 break;
@@ -137,6 +140,36 @@ static void parse_arguments(const struct p101_env *env, int argc, char *argv[], 
             case 'P':
             {
                 args->port_out = optarg;
+                break;
+            }
+            case 's':
+            {
+                args->min_seconds = optarg;
+                break;
+            }
+            case 'S':
+            {
+                args->max_seconds = optarg;
+                break;
+            }
+            case 'n':
+            {
+                args->min_nanoseconds = optarg;
+                break;
+            }
+            case 'N':
+            {
+                args->max_nanoseconds = optarg;
+                break;
+            }
+            case 'b':
+            {
+                args->min_bytes = optarg;
+                break;
+            }
+            case 'B':
+            {
+                args->max_bytes = optarg;
                 break;
             }
             case 'h':
@@ -169,6 +202,11 @@ static void check_arguments(const struct p101_env *env, const char *binary_name,
 {
     P101_TRACE(env);
 
+    if(args->backlog == NULL)
+    {
+        usage(env, binary_name, EXIT_FAILURE, "The backlog is required.");
+    }
+
     if(args->ip_address_in == NULL)
     {
         usage(env, binary_name, EXIT_FAILURE, "The listening ip address is required.");
@@ -189,55 +227,127 @@ static void check_arguments(const struct p101_env *env, const char *binary_name,
         usage(env, binary_name, EXIT_FAILURE, "The forwarding port is required.");
     }
 
-    if(args->backlog == NULL)
+    if((args->min_seconds == NULL && args->max_seconds != NULL) || (args->min_seconds != NULL && args->max_seconds == NULL))
     {
-        usage(env, binary_name, EXIT_FAILURE, "The backlog is required.");
+        usage(env, binary_name, EXIT_FAILURE, "If min-seconds is specified, max-seconds must be specified and vice versa.");
+    }
+
+    if((args->min_nanoseconds == NULL && args->max_nanoseconds != NULL) || (args->min_nanoseconds != NULL && args->max_nanoseconds == NULL))
+    {
+        usage(env, binary_name, EXIT_FAILURE, "If min-nanoseconds is specified, max-nanoseconds must be specified and vice versa.");
+    }
+
+    if((args->min_bytes == NULL && args->max_bytes != NULL) || (args->min_bytes != NULL && args->max_bytes == NULL))
+    {
+        usage(env, binary_name, EXIT_FAILURE, "If min-bytes is specified, max-bytes must be specified and vice versa.");
     }
 }
 
 static void convert_arguments(const struct p101_env *env, struct p101_error *error, const struct arguments *args, struct settings *sets)
 {
+    time_t min_time_t;
+    time_t max_time_t;
+
     P101_TRACE(env);
+    min_time_t         = get_time_t_min(env, error);
+    max_time_t         = get_time_t_max(env, error);
     sets->verbose      = args->verbose;
     sets->very_verbose = args->very_verbose;
+    sets->backlog      = parse_positive_int(env, error, args->backlog);
+
+    if(p101_error_has_error(error))
+    {
+        goto done;
+    }
+
     convert_address(env, error, args->ip_address_in, &sets->addr_in);
 
     if(p101_error_has_error(error))
     {
-        goto error;
-    }
-
-    convert_address(env, error, args->ip_address_out, &sets->addr_out);
-
-    if(p101_error_has_error(error))
-    {
-        goto error;
+        goto done;
     }
 
     sets->port_in = parse_in_port_t(env, error, args->port_in);
 
     if(p101_error_has_error(error))
     {
-        goto error;
+        goto done;
+    }
+
+    convert_address(env, error, args->ip_address_out, &sets->addr_out);
+
+    if(p101_error_has_error(error))
+    {
+        goto done;
     }
 
     sets->port_out = parse_in_port_t(env, error, args->port_out);
 
     if(p101_error_has_error(error))
     {
-        goto error;
+        goto done;
     }
 
-    sets->backlog = parse_positive_int(env, error, args->backlog);
-
-    if(p101_error_has_error(error))
+    if(args->min_seconds)
     {
-        goto error;
+        sets->min_seconds = parse_time_t(env, error, min_time_t, max_time_t, args->min_seconds);
+
+        if(p101_error_has_error(error))
+        {
+            goto done;
+        }
     }
 
-    goto done;
+    if(args->max_seconds)
+    {
+        sets->max_seconds = parse_time_t(env, error, min_time_t, max_time_t, args->max_seconds);
 
-error:
+        if(p101_error_has_error(error))
+        {
+            goto done;
+        }
+    }
+
+    if(args->min_nanoseconds)
+    {
+        sets->min_nanoseconds = parse_long(env, error, args->min_nanoseconds);
+
+        if(p101_error_has_error(error))
+        {
+            goto done;
+        }
+    }
+
+    if(args->max_nanoseconds)
+    {
+        sets->max_nanoseconds = parse_long(env, error, args->max_nanoseconds);
+
+        if(p101_error_has_error(error))
+        {
+            goto done;
+        }
+    }
+
+    if(args->min_bytes)
+    {
+        sets->min_bytes = parse_unsigned_int(env, error, args->min_bytes);
+
+        if(p101_error_has_error(error))
+        {
+            goto done;
+        }
+    }
+
+    if(args->max_bytes)
+    {
+        sets->max_bytes = parse_unsigned_int(env, error, args->max_bytes);
+
+        if(p101_error_has_error(error))
+        {
+            goto done;
+        }
+    }
+
 done:
     return;
 }
@@ -252,16 +362,21 @@ _Noreturn static void usage(const struct p101_env *env, const char *program_name
     }
 
     fprintf(stderr,
-            "Usage: %s [-h] [-v] [-V] -b <backlog> -a <ip address> -p <port> -A "
-            "<ip address> -P <port>\n",
+            "Usage: %s [-h] [-v] [-V] -l <backlog> -a <listening ip address> -p <listening port> -A <forwarding ip address> -P <forwarding port> [-s <min seconds> -S <max seconds> -n <min nanoseconds> -N <max nanoseconds> -b <num bytes> -B <max bytes>]\n",
             program_name);
     fputs("Options:\n", stderr);
     fputs("  -h Display this help message\n", stderr);
-    fputs("  -b <backlog> the backlog\n", stderr);
+    fputs("  -l <backlog> the backlog\n", stderr);
     fputs("  -a <listening ip address> the ip address to listen to\n", stderr);
     fputs("  -p <listening port> the port to listen to\n", stderr);
     fputs("  -A <forwarding ip address> the ip address to forward to\n", stderr);
     fputs("  -P <forwarding port> the port to forward to\n", stderr);
+    fputs("  -s <min seconds> minimum number of seconds to delay between packets", stderr);
+    fputs("  -S <max seconds> maximum number of seconds to delay between packets", stderr);
+    fputs("  -n <min nanoseconds> minimum number of nanoseconds to delay between packets", stderr);
+    fputs("  -N <max nanoseconds> maximum number of nanoseconds to delay between packets", stderr);
+    fputs("  -b <num bytes> minimum number of bytes to send per packet", stderr);
+    fputs("  -B <max bytes> maximum number of bytes to send per packet", stderr);
     fputs("  -v verbose\n", stderr);
     fputs("  -V very verbose\n", stderr);
     exit(exit_code);
