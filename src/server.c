@@ -8,37 +8,10 @@
 #include <p101_posix/p101_time.h>
 #include <p101_posix/p101_unistd.h>
 #include <p101_posix/sys/p101_socket.h>
+#include <p101_unix/p101_stdlib.h>
 #include <signal.h>
 #include <stdio.h>
 #include <sys/socket.h>
-
-static void             check_settings(const struct p101_env *env, struct p101_error *err, const struct settings *sets);
-static void             setup_signal_handler(const struct p101_env *env, struct p101_error *err);
-static void             sigint_handler(int signum);
-static p101_fsm_state_t socket_create(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg);
-static void            *copy_handler(void *arg);
-static ssize_t          copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets);
-static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
-
-static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
-#ifndef BUFFER_LEN
-    #define BUFFER_LEN ((size_t)1024 * (size_t)10)
-#endif
-
-enum server_states
-{
-    SOCKET = P101_FSM_USER_START,    // 2
-    BIND,
-    LISTEN,
-    ACCEPT,
-    HANDLE,
-    CLEANUP,
-};
 
 struct server_data
 {
@@ -55,6 +28,37 @@ struct copy_data
     const struct settings *sets;
     int                    to_fd;
     int                    from_fd;
+};
+
+static void             check_settings(const struct p101_env *env, struct p101_error *err, const struct settings *sets);
+static void             setup_signal_handler(const struct p101_env *env, struct p101_error *err);
+static void             sigint_handler(int signum);
+static p101_fsm_state_t socket_create(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg);
+static void             start_copy_thread(const struct p101_env *env, struct p101_error *err, pthread_t *forwarder_thread, struct copy_data *data, const struct settings *sets, int from_socket, int to_socket);
+static void            *copy_handler(void *arg);
+static bool             copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets);
+static void             delay(const struct p101_env *env, struct p101_error *err, time_t min_seconds, time_t max_seconds, long min_nanoseconds, long max_nanoseconds);
+static long             generate_random_long(const struct p101_env *env, long min, long max);
+static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
+
+static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+#ifndef BUFFER_LEN
+    #define BUFFER_LEN ((size_t)10240 * (size_t)10)
+#endif
+
+enum server_states
+{
+    SOCKET = P101_FSM_USER_START,    // 2
+    BIND,
+    LISTEN,
+    ACCEPT,
+    HANDLE,
+    CLEANUP,
 };
 
 void run_server(const struct p101_env *env, struct p101_error *err, struct settings *sets)
@@ -265,10 +269,14 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
         goto error;
     }
 
-    if(p101_error_has_no_error(err))
+    p101_setsockopt(env, err, data->server_socket, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+
+    if(p101_error_has_error(err))
     {
-        p101_bind(env, err, data->server_socket, (struct sockaddr *)&data->sets->addr_in, addr_len);
+        goto error;
     }
+
+    p101_bind(env, err, data->server_socket, (struct sockaddr *)&data->sets->addr_in, addr_len);
 
     if(p101_error_has_error(err))
     {
@@ -335,6 +343,7 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
     in_port_t           net_port;
 
     P101_TRACE(env);
+    printf("Handing connection\n");
     data                 = (struct server_data *)arg;
     data->forward_socket = p101_socket(env, err, data->sets->addr_in.ss_family, SOCK_STREAM, 0);
     net_port             = htons(data->sets->port_out);
@@ -368,29 +377,19 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
 
     if(p101_error_has_no_error(err))
     {
-        struct copy_data to_forwarder_data;
-        pthread_t        to_forwarder;
-        struct copy_data from_forwarder_data;
         pthread_t        from_forwarder;
+        struct copy_data from_data;
+        pthread_t        to_forwarder;
+        struct copy_data to_data;
 
-        to_forwarder_data.env     = env;
-        to_forwarder_data.err     = err;
-        to_forwarder_data.sets    = data->sets;
-        to_forwarder_data.from_fd = data->client_socket;
-        to_forwarder_data.to_fd   = data->forward_socket;
-        p101_pthread_create(env, err, &to_forwarder, NULL, copy_handler, &to_forwarder_data);
+        start_copy_thread(env, err, &from_forwarder, &from_data, data->sets, data->forward_socket, data->client_socket);
 
         if(p101_error_has_error(err))
         {
             goto error;
         }
 
-        from_forwarder_data.env     = env;
-        from_forwarder_data.err     = err;
-        from_forwarder_data.sets    = data->sets;
-        from_forwarder_data.from_fd = data->forward_socket;
-        from_forwarder_data.to_fd   = data->client_socket;
-        p101_pthread_create(env, err, &from_forwarder, NULL, copy_handler, &from_forwarder_data);
+        start_copy_thread(env, err, &to_forwarder, &to_data, data->sets, data->client_socket, data->forward_socket);
 
         if(p101_error_has_error(err))
         {
@@ -398,8 +397,10 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
         }
 
         // wait for the threads to finish
-        p101_pthread_join(env, err, to_forwarder, NULL);
         p101_pthread_join(env, err, from_forwarder, NULL);
+        p101_close(env, err, data->client_socket);
+        p101_close(env, err, data->forward_socket);
+        p101_pthread_join(env, err, to_forwarder, NULL);
     }
 
     if(p101_error_has_error(err))
@@ -414,81 +415,170 @@ error:
     next_state = CLEANUP;
 
 done:
+    printf("Connection handled\n");
+
     return next_state;
+}
+
+static void start_copy_thread(const struct p101_env *env, struct p101_error *err, pthread_t *forwarder_thread, struct copy_data *data, const struct settings *sets, int from_socket, int to_socket)
+{
+    data->env     = env;
+    data->err     = err;
+    data->sets    = sets;
+    data->from_fd = from_socket;
+    data->to_fd   = to_socket;
+    p101_pthread_create(env, err, forwarder_thread, NULL, copy_handler, data);
 }
 
 static void *copy_handler(void *arg)
 {
     struct copy_data *data;
+    bool              closed;
 
     data = (struct copy_data *)arg;
-    copy(data->env, data->err, data->to_fd, data->from_fd, data->sets);
+    do
+    {
+        closed = copy(data->env, data->err, data->to_fd, data->from_fd, data->sets);
+
+        if(p101_error_has_error(data->err))
+        {
+            goto done;
+        }
+
+        printf("closed %d -> %d?: %d\n", data->from_fd, data->to_fd, closed);
+    } while(!(closed));
+
+done:
+    printf("Ending thread\n");
 
     return NULL;
 }
 
-static ssize_t copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets)
+static bool copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets)
 {
     uint8_t buffer[BUFFER_LEN];
     ssize_t bytes_read;
+    bool    closed;
 
+    closed = false;
+    printf("Reading from %d to send to %d\n", from_fd, to_fd);
     bytes_read = p101_read(env, err, from_fd, buffer, BUFFER_LEN);
+    printf("Reading %zd from %d to send to %d\n", bytes_read, from_fd, to_fd);
 
-    if(p101_error_has_no_error(err))
+    if(p101_error_has_error(err))
     {
-        if(bytes_read == 0)
+        if(p101_error_is_errno(err, EBADF))
         {
-            p101_close(env, err, to_fd);
+            p101_error_reset(err);
+            closed = true;
         }
-        else
+
+        goto done;
+    }
+
+    if(bytes_read == 0)
+    {
+        closed = true;
+    }
+    else
+    {
+        size_t bytes_remaining;
+        size_t pos;
+
+        bytes_remaining = (size_t)bytes_read;
+        pos             = 0;
+
+        do
         {
-            size_t bytes_remaining;
-            size_t pos;
+            size_t  bytes_to_write;
+            ssize_t bytes_written;
 
-            bytes_remaining = (size_t)bytes_read;
-            pos             = 0;
-
-            do
+            if(sets->min_bytes == 0)
             {
-                size_t          bytes_to_write;
-                ssize_t         bytes_written;
-                struct timespec tim;
-
-                if(sets->min_bytes > 0)
+                bytes_to_write = bytes_remaining;
+            }
+            else
+            {
+                if(sets->min_bytes == sets->max_bytes)
                 {
-                    // TODO: calculate this as a random number
                     bytes_to_write = sets->min_bytes;
                 }
                 else
                 {
+                    bytes_to_write = p101_arc4random_uniform(env, (uint32_t)(sets->max_bytes - sets->min_bytes + 1)) + sets->min_bytes;
+                }
+
+                if(bytes_to_write > bytes_remaining)
+                {
                     bytes_to_write = bytes_remaining;
                 }
+            }
 
-                bytes_written = p101_write(env, err, to_fd, &buffer[pos], bytes_to_write);
+            bytes_written = p101_write(env, err, to_fd, &buffer[pos], bytes_to_write);
 
-                if(p101_error_has_error(err))
-                {
-                    goto done;
-                }
+            if(p101_error_has_error(err))
+            {
+                goto done;
+            }
 
-                p101_write(env, err, STDOUT_FILENO, &buffer[pos], (size_t)bytes_written);
-                bytes_remaining -= (size_t)bytes_written;
-                pos += (size_t)bytes_written;
-                // TODO: random time
-                tim.tv_sec  = sets->min_seconds;
-                tim.tv_nsec = sets->min_nanoseconds;
-                p101_nanosleep(env, err, &tim, NULL);
+            // TODO: if verbose
+            /*
+            printf("\n----\n");
+            fflush(stdout);
+            p101_write(env, err, STDOUT_FILENO, &buffer[pos], (size_t)bytes_written);
+            fflush(stdout);
+            printf("\n----\n");
+            */
+            if(p101_error_has_error(err))
+            {
+                goto done;
+            }
 
-                if(p101_error_has_error(err))
-                {
-                    goto done;
-                }
-            } while(bytes_remaining > 0);
-        }
+            bytes_remaining -= (size_t)bytes_written;
+            pos += (size_t)bytes_written;
+            delay(env, err, sets->min_seconds, sets->max_seconds, sets->min_nanoseconds, sets->max_nanoseconds);
+
+            if(p101_error_has_error(err))
+            {
+                goto done;
+            }
+        } while(bytes_remaining > 0);
     }
 
 done:
-    return bytes_read;
+    return closed;
+}
+
+static void delay(const struct p101_env *env, struct p101_error *err, time_t min_seconds, time_t max_seconds, long min_nanoseconds, long max_nanoseconds)
+{
+    struct timespec tim;
+
+    if(min_seconds == max_seconds && min_nanoseconds == max_nanoseconds)
+    {
+        tim.tv_sec  = min_seconds;
+        tim.tv_nsec = min_nanoseconds;
+    }
+    else
+    {
+        tim.tv_sec  = min_seconds;
+        tim.tv_nsec = generate_random_long(env, min_nanoseconds, max_nanoseconds);
+    }
+
+    p101_nanosleep(env, err, &tim, NULL);
+}
+
+static long generate_random_long(const struct p101_env *env, long min, long max)
+{
+    long num;
+
+    num = 0;
+
+    for(size_t i = 0; i < sizeof(long); i += sizeof(uint32_t))
+    {
+        num = (num << 32) | p101_arc4random(env);    // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+    }
+
+    return min + num % (max - min + 1);
 }
 
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
