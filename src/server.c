@@ -5,6 +5,7 @@
 #include <p101_fsm/fsm.h>
 #include <p101_posix/p101_pthread.h>
 #include <p101_posix/p101_signal.h>
+#include <p101_posix/p101_time.h>
 #include <p101_posix/p101_unistd.h>
 #include <p101_posix/sys/p101_socket.h>
 #include <signal.h>
@@ -20,7 +21,7 @@ static p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_er
 static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg);
 static void            *copy_handler(void *arg);
-static ssize_t          copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd);
+static ssize_t          copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets);
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
 
 static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
@@ -51,6 +52,7 @@ struct copy_data
 {
     struct p101_error     *err;
     const struct p101_env *env;
+    const struct settings *sets;
     int                    to_fd;
     int                    from_fd;
 };
@@ -373,6 +375,7 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
 
         to_forwarder_data.env     = env;
         to_forwarder_data.err     = err;
+        to_forwarder_data.sets    = data->sets;
         to_forwarder_data.from_fd = data->client_socket;
         to_forwarder_data.to_fd   = data->forward_socket;
         p101_pthread_create(env, err, &to_forwarder, NULL, copy_handler, &to_forwarder_data);
@@ -384,6 +387,7 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
 
         from_forwarder_data.env     = env;
         from_forwarder_data.err     = err;
+        from_forwarder_data.sets    = data->sets;
         from_forwarder_data.from_fd = data->forward_socket;
         from_forwarder_data.to_fd   = data->client_socket;
         p101_pthread_create(env, err, &from_forwarder, NULL, copy_handler, &from_forwarder_data);
@@ -418,38 +422,73 @@ static void *copy_handler(void *arg)
     struct copy_data *data;
 
     data = (struct copy_data *)arg;
-    copy(data->env, data->err, data->to_fd, data->from_fd);
+    copy(data->env, data->err, data->to_fd, data->from_fd, data->sets);
 
     return NULL;
 }
 
-static ssize_t copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd)
+static ssize_t copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets)
 {
     uint8_t buffer[BUFFER_LEN];
-    ssize_t len;
+    ssize_t bytes_read;
 
-    // TODO: loop until closed
-    len = p101_read(env, err, from_fd, buffer, BUFFER_LEN);
+    bytes_read = p101_read(env, err, from_fd, buffer, BUFFER_LEN);
 
     if(p101_error_has_no_error(err))
     {
-        if(len == 0)
+        if(bytes_read == 0)
         {
             p101_close(env, err, to_fd);
         }
         else
         {
-            // TODO: handle short write
-            p101_write(env, err, to_fd, buffer, (size_t)len);
-            p101_write(env, err, STDOUT_FILENO, buffer, (size_t)len);
+            size_t bytes_remaining;
+            size_t pos;
+
+            bytes_remaining = (size_t)bytes_read;
+            pos             = 0;
+
+            do
+            {
+                size_t          bytes_to_write;
+                ssize_t         bytes_written;
+                struct timespec tim;
+
+                if(sets->min_bytes > 0)
+                {
+                    // TODO: calculate this as a random number
+                    bytes_to_write = sets->min_bytes;
+                }
+                else
+                {
+                    bytes_to_write = bytes_remaining;
+                }
+
+                bytes_written = p101_write(env, err, to_fd, &buffer[pos], bytes_to_write);
+
+                if(p101_error_has_error(err))
+                {
+                    goto done;
+                }
+
+                p101_write(env, err, STDOUT_FILENO, &buffer[pos], (size_t)bytes_written);
+                bytes_remaining -= (size_t)bytes_written;
+                pos += (size_t)bytes_written;
+                // TODO: random time
+                tim.tv_sec  = sets->min_seconds;
+                tim.tv_nsec = sets->min_nanoseconds;
+                p101_nanosleep(env, err, &tim, NULL);
+
+                if(p101_error_has_error(err))
+                {
+                    goto done;
+                }
+            } while(bytes_remaining > 0);
         }
     }
-    else
-    {
-        printf("Error");
-    }
 
-    return len;
+done:
+    return bytes_read;
 }
 
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
