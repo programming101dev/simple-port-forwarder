@@ -45,7 +45,10 @@ static void             delay(const struct p101_env *env, struct p101_error *err
 static long             generate_random_long(const struct p101_env *env, long min, long max);
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
 
-static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static volatile sig_atomic_t exit_flag      = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static pthread_mutex_t       lock           = PTHREAD_MUTEX_INITIALIZER;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static pthread_cond_t        cond           = PTHREAD_COND_INITIALIZER;     // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static unsigned int          active_threads = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 #ifndef BUFFER_LEN
     #define BUFFER_LEN ((size_t)10240 * (size_t)10)
@@ -341,12 +344,22 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
     p101_fsm_state_t    next_state;
     socklen_t           addr_len;
     in_port_t           net_port;
+    pthread_t           from_forwarder;
+    struct copy_data    from_data;
+    pthread_t           to_forwarder;
+    struct copy_data    to_data;
 
     P101_TRACE(env);
     printf("Handing connection\n");
     data                 = (struct server_data *)arg;
     data->forward_socket = p101_socket(env, err, data->sets->addr_in.ss_family, SOCK_STREAM, 0);
-    net_port             = htons(data->sets->port_out);
+
+    if(p101_error_has_error(err))
+    {
+        goto error;
+    }
+
+    net_port = htons(data->sets->port_out);
 
     if(data->sets->addr_in.ss_family == AF_INET)
     {
@@ -370,38 +383,44 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
         goto error;
     }
 
-    if(p101_error_has_no_error(err))
+    printf("Connecting to server\n");
+    p101_connect(env, err, data->forward_socket, (struct sockaddr *)&data->sets->addr_out, addr_len);
+
+    if(p101_error_has_error(err))
     {
-        p101_connect(env, err, data->forward_socket, (struct sockaddr *)&data->sets->addr_out, addr_len);
+        goto error;
     }
 
-    if(p101_error_has_no_error(err))
+    printf("Connected to server\n");
+    start_copy_thread(env, err, &from_forwarder, &from_data, data->sets, data->forward_socket, data->client_socket);
+
+    if(p101_error_has_error(err))
     {
-        pthread_t        from_forwarder;
-        struct copy_data from_data;
-        pthread_t        to_forwarder;
-        struct copy_data to_data;
-
-        start_copy_thread(env, err, &from_forwarder, &from_data, data->sets, data->forward_socket, data->client_socket);
-
-        if(p101_error_has_error(err))
-        {
-            goto error;
-        }
-
-        start_copy_thread(env, err, &to_forwarder, &to_data, data->sets, data->client_socket, data->forward_socket);
-
-        if(p101_error_has_error(err))
-        {
-            goto error;
-        }
-
-        // wait for the threads to finish
-        p101_pthread_join(env, err, from_forwarder, NULL);
-        p101_close(env, err, data->client_socket);
-        p101_close(env, err, data->forward_socket);
-        p101_pthread_join(env, err, to_forwarder, NULL);
+        goto error;
     }
+
+    start_copy_thread(env, err, &to_forwarder, &to_data, data->sets, data->client_socket, data->forward_socket);
+
+    if(p101_error_has_error(err))
+    {
+        goto error;
+    }
+
+    // wait for a thread to signal the condition
+    pthread_mutex_lock(&lock);
+
+    while(active_threads > 1)
+    {
+        pthread_cond_wait(&cond, &lock);
+    }
+
+    pthread_mutex_unlock(&lock);
+    p101_close(env, err, data->client_socket);
+    p101_close(env, err, data->forward_socket);
+
+    // wait for a thread to finish
+    p101_pthread_join(env, err, from_forwarder, NULL);
+    p101_pthread_join(env, err, to_forwarder, NULL);
 
     if(p101_error_has_error(err))
     {
@@ -427,7 +446,11 @@ static void start_copy_thread(const struct p101_env *env, struct p101_error *err
     data->sets    = sets;
     data->from_fd = from_socket;
     data->to_fd   = to_socket;
+
+    pthread_mutex_lock(&lock);
     p101_pthread_create(env, err, forwarder_thread, NULL, copy_handler, data);
+    active_threads++;
+    pthread_mutex_unlock(&lock);
 }
 
 static void *copy_handler(void *arg)
@@ -450,6 +473,10 @@ static void *copy_handler(void *arg)
 
 done:
     printf("Ending thread\n");
+    pthread_mutex_lock(&lock);
+    active_threads--;
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(&lock);
 
     return NULL;
 }
