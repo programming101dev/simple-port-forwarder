@@ -211,6 +211,7 @@ static void setup_signal_handler(const struct p101_env *env, struct p101_error *
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+// TODO: actually add this to the FSM
 static void sigint_handler(const int signum)
 {
     exit_flag = 1;
@@ -447,10 +448,7 @@ static void start_copy_thread(const struct p101_env *env, struct p101_error *err
     data->from_fd = from_socket;
     data->to_fd   = to_socket;
 
-    pthread_mutex_lock(&lock);
     p101_pthread_create(env, err, forwarder_thread, NULL, copy_handler, data);
-    active_threads++;
-    pthread_mutex_unlock(&lock);
 }
 
 static void *copy_handler(void *arg)
@@ -458,7 +456,13 @@ static void *copy_handler(void *arg)
     struct copy_data *data;
     bool              closed;
 
+    // TODO: can I make active_threads atomic?
+    pthread_mutex_lock(&lock);
+    active_threads++;
+    pthread_mutex_unlock(&lock);
+
     data = (struct copy_data *)arg;
+
     do
     {
         closed = copy(data->env, data->err, data->to_fd, data->from_fd, data->sets);

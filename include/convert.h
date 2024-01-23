@@ -1,13 +1,8 @@
-//
-// Created by D'Arcy Smith on 2024-01-12.
-//
-
 #ifndef SERVER_CONVERT_H
 #define SERVER_CONVERT_H
 
 #include <netinet/in.h>
 #include <p101_env/env.h>
-#include <p101_error/error.h>
 #include <sys/socket.h>
 #include <time.h>
 

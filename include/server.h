@@ -3,7 +3,6 @@
 
 #include <netinet/in.h>
 #include <p101_env/env.h>
-#include <p101_error/error.h>
 #include <stdbool.h>
 #include <sys/socket.h>
 
