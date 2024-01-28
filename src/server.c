@@ -142,7 +142,7 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     }
 
     data.sets = sets;
-    p101_fsm_run(fsm, &from_state, &to_state, &data, transitions);
+    p101_fsm_run(fsm, &from_state, &to_state, &data, transitions, sizeof(transitions));
     p101_fsm_info_destroy(env, &fsm);
 
     if(p101_error_has_error(fsm_err))

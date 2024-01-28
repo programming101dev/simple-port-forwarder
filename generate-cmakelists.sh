@@ -102,11 +102,6 @@ generate_cmake_content() {
   echo "endfunction()" >> "$output_file"
   echo "" >> "$output_file"
 
-  # Import warning_flags.txt
-  echo "file(STRINGS \"\${CMAKE_SOURCE_DIR}/.flags/\${COMPILER_NAME}/warning_flags.txt\" WARNING_FLAGS_STRING)" >> "$output_file"
-  echo "split_string_into_list(\"\${WARNING_FLAGS_STRING}\" WARNING_FLAGS_LIST)" >> "$output_file"
-  echo "" >> "$output_file"
-
   # Import analyzer_flags.txt
   echo "file(STRINGS \"\${CMAKE_SOURCE_DIR}/.flags/\${COMPILER_NAME}/analyzer_flags.txt\" ANALYZER_FLAGS_STRING)" >> "$output_file"
   echo "split_string_into_list(\"\${ANALYZER_FLAGS_STRING}\" ANALYZER_FLAGS_LIST)" >> "$output_file"
@@ -117,9 +112,19 @@ generate_cmake_content() {
   echo "split_string_into_list(\"\${DEBUG_FLAGS_STRING}\" DEBUG_FLAGS_LIST)" >> "$output_file"
   echo "" >> "$output_file"
 
-  # Import sanitizer_flags.txt
-  echo "file(STRINGS \"\${CMAKE_SOURCE_DIR}/.flags/\${COMPILER_NAME}/sanitizer_flags.txt\" SANITIZER_FLAGS_STRING)" >> "$output_file"
-  echo "split_string_into_list(\"\${SANITIZER_FLAGS_STRING}\" SANITIZER_FLAGS_LIST)" >> "$output_file"
+  # Import instrumentation_flags.txt
+  echo "file(STRINGS \"\${CMAKE_SOURCE_DIR}/.flags/\${COMPILER_NAME}/instrumentation_flags.txt\" INSTRUMENTATION_FLAGS_STRING)" >> "$output_file"
+  echo "split_string_into_list(\"\${INSTRUMENTATION_FLAGS_STRING}\" INSTRUMENTATION_FLAGS_LIST)" >> "$output_file"
+  echo "" >> "$output_file"
+
+  # Import optimization_flags.txt
+  echo "file(STRINGS \"\${CMAKE_SOURCE_DIR}/.flags/\${COMPILER_NAME}/optimization_flags.txt\" OPTIMIZATION_FLAGS_STRING)" >> "$output_file"
+  echo "split_string_into_list(\"\${OPTIMIZATION_FLAGS_STRING}\" OPTIMIZATION_FLAGS_LIST)" >> "$output_file"
+  echo "" >> "$output_file"
+
+  # Import warning_flags.txt
+  echo "file(STRINGS \"\${CMAKE_SOURCE_DIR}/.flags/\${COMPILER_NAME}/warning_flags.txt\" WARNING_FLAGS_STRING)" >> "$output_file"
+  echo "split_string_into_list(\"\${WARNING_FLAGS_STRING}\" WARNING_FLAGS_LIST)" >> "$output_file"
   echo "" >> "$output_file"
 
   # Common compiler flags
@@ -139,14 +144,15 @@ generate_cmake_content() {
     echo "# Set compiler flags for the target $target" >> "$output_file"
     echo "target_compile_options($target PRIVATE" >> "$output_file"
     echo "    \${STANDARD_FLAGS}" >> "$output_file"
-    echo "    \${WARNING_FLAGS_LIST}" >> "$output_file"
     echo "    \${ANALYZER_FLAGS_LIST}" >> "$output_file"
     echo "    \${DEBUG_FLAGS_LIST}" >> "$output_file"
-    echo "    \${SANITIZER_FLAGS_LIST}" >> "$output_file"
+    echo "    \${INSTRUMENTATION_FLAGS_LIST}" >> "$output_file"
+    echo "    \${OPTIMIZATION_FLAGS_LIST}" >> "$output_file"
+    echo "    \${WARNING_FLAGS_LIST}" >> "$output_file"
     echo ")" >> "$output_file"
 
     echo "# Add target_link_libraries for $target" >> "$output_file"
-    echo "target_link_libraries($target PRIVATE \${SANITIZER_FLAGS_STRING})" >> "$output_file"
+    echo "target_link_libraries($target PRIVATE \${INSTRUMENTATION_FLAGS_STRING})" >> "$output_file"
     echo "" >> "$output_file"
   done
 
