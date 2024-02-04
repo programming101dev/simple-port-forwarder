@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
     struct settings    sets = {0};
     int                exit_code;
 
-    err = p101_error_create(false);
+    err = p101_error_create(true);
     env = p101_env_create(err, true, NULL);
     parse_arguments(env, argc, argv, &args);
 

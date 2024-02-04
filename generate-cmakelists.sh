@@ -64,7 +64,7 @@ generate_cmake_content() {
 {
   # Read the first line of files.txt to determine the first target
   first_target=$(awk '{print $1; exit}' "$input_file")
-  echo "cmake_minimum_required(VERSION 3.12)" > "$output_file"
+  echo "cmake_minimum_required(VERSION 3.21)" > "$output_file"
   echo "" >> "$output_file"
   echo "project($first_target" >> "$output_file"
   echo "        VERSION 0.0.1" >> "$output_file"

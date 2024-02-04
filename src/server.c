@@ -10,6 +10,7 @@
 #include <p101_posix/sys/p101_socket.h>
 #include <p101_unix/p101_stdlib.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <sys/socket.h>
 
@@ -48,7 +49,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
 static volatile sig_atomic_t exit_flag      = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static pthread_mutex_t       lock           = PTHREAD_MUTEX_INITIALIZER;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static pthread_cond_t        cond           = PTHREAD_COND_INITIALIZER;     // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-static unsigned int          active_threads = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static atomic_int            active_threads = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 #ifndef BUFFER_LEN
     #define BUFFER_LEN ((size_t)10240 * (size_t)10)
@@ -410,13 +411,20 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
     // wait for a thread to signal the condition
     pthread_mutex_lock(&lock);
 
-    while(active_threads > 1)
+    //    printf("active threads = %u\n", atomic_load(&active_threads));
+
+    while(atomic_load(&active_threads) > 1)
     {
+        printf("active threads = %u\n", atomic_load(&active_threads));
+        printf("waiting on condition\n");
         pthread_cond_wait(&cond, &lock);
+        printf("condition done\n");
     }
 
     pthread_mutex_unlock(&lock);
+    printf("closing %d\n", data->client_socket);
     p101_close(env, err, data->client_socket);
+    printf("closing %d\n", data->forward_socket);
     p101_close(env, err, data->forward_socket);
 
     // wait for a thread to finish
@@ -448,18 +456,16 @@ static void start_copy_thread(const struct p101_env *env, struct p101_error *err
     data->from_fd = from_socket;
     data->to_fd   = to_socket;
 
+    atomic_fetch_add(&active_threads, 1);
     p101_pthread_create(env, err, forwarder_thread, NULL, copy_handler, data);
+
+    // TODO: handle if pthread_create fails
 }
 
 static void *copy_handler(void *arg)
 {
     struct copy_data *data;
     bool              closed;
-
-    // TODO: can I make active_threads atomic?
-    pthread_mutex_lock(&lock);
-    active_threads++;
-    pthread_mutex_unlock(&lock);
 
     data = (struct copy_data *)arg;
 
@@ -477,8 +483,8 @@ static void *copy_handler(void *arg)
 
 done:
     printf("Ending thread\n");
+    atomic_fetch_sub(&active_threads, 1);
     pthread_mutex_lock(&lock);
-    active_threads--;
     pthread_cond_signal(&cond);
     pthread_mutex_unlock(&lock);
 
@@ -494,7 +500,7 @@ static bool copy(const struct p101_env *env, struct p101_error *err, int to_fd, 
     closed = false;
     printf("Reading from %d to send to %d\n", from_fd, to_fd);
     bytes_read = p101_read(env, err, from_fd, buffer, BUFFER_LEN);
-    printf("Reading %zd from %d to send to %d\n", bytes_read, from_fd, to_fd);
+    printf("Read %zd from %d to send to %d\n", bytes_read, from_fd, to_fd);
 
     if(p101_error_has_error(err))
     {
@@ -623,6 +629,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
     // TODO: is this -1 at the start?
     if(data->server_socket != -1)
     {
+        printf("closing %d\n", data->server_socket);
         p101_close(env, err, data->server_socket);
         data->server_socket = -1;
     }
