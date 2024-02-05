@@ -49,7 +49,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
 static volatile sig_atomic_t exit_flag      = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static pthread_mutex_t       lock           = PTHREAD_MUTEX_INITIALIZER;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 static pthread_cond_t        cond           = PTHREAD_COND_INITIALIZER;     // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-static atomic_int            active_threads = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static atomic_uint           active_threads = 0;                            // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
 #ifndef BUFFER_LEN
     #define BUFFER_LEN ((size_t)10240 * (size_t)10)
