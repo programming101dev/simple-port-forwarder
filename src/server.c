@@ -551,10 +551,10 @@ static bool copy(const struct p101_env *env, struct p101_error *err, int to_fd, 
                 }
             }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunsafe-buffer-usage"
+//#pragma GCC diagnostic push
+//#pragma GCC diagnostic ignored "-Wunsafe-buffer-usage"
             bytes_written = p101_write(env, err, to_fd, &buffer[pos], bytes_to_write);
-#pragma GCC diagnostic pop
+//#pragma GCC diagnostic pop
 
             if(p101_error_has_error(err))
             {
