@@ -9,19 +9,32 @@
 
 struct settings
 {
-    int                     backlog;
+    // cppcheck-suppress unusedStructMember
+    int backlog;
+    // cppcheck-suppress unusedStructMember
     struct sockaddr_storage addr_in;
-    in_port_t               port_in;
+    // cppcheck-suppress unusedStructMember
+    in_port_t port_in;
+    // cppcheck-suppress unusedStructMember
     struct sockaddr_storage addr_out;
-    in_port_t               port_out;
-    time_t                  min_seconds;
-    time_t                  max_seconds;
-    long                    min_nanoseconds;
-    long                    max_nanoseconds;
-    unsigned int            min_bytes;
-    unsigned int            max_bytes;
-    bool                    verbose;
-    bool                    very_verbose;
+    // cppcheck-suppress unusedStructMember
+    in_port_t port_out;
+    // cppcheck-suppress unusedStructMember
+    time_t min_seconds;
+    // cppcheck-suppress unusedStructMember
+    time_t max_seconds;
+    // cppcheck-suppress unusedStructMember
+    long min_nanoseconds;
+    // cppcheck-suppress unusedStructMember
+    long max_nanoseconds;
+    // cppcheck-suppress unusedStructMember
+    unsigned int min_bytes;
+    // cppcheck-suppress unusedStructMember
+    unsigned int max_bytes;
+    // cppcheck-suppress unusedStructMember
+    bool verbose;
+    // cppcheck-suppress unusedStructMember
+    bool very_verbose;
 };
 
 void run_server(const struct p101_env *env, struct p101_error *err, struct settings *sets);
