@@ -618,7 +618,7 @@ static long generate_random_long(const struct p101_env *env, long min, long max)
         num = (num << 32) | p101_arc4random(env);    // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     }
 
-    return min + num % (max - min + 1);
+    return min + (num % (max - min + 1));
 }
 
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
