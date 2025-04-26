@@ -51,7 +51,6 @@ done < "supported_c_compilers.txt"
 for c_compiler in "${c_compilers[@]}"; do
     echo "$c_compiler"
 
-    ./generate-cmakelists.sh
     ./change-compiler.sh -c "$c_compiler" -f "$clang_format_name" -t "$clang_tidy_name" -k "$cppcheck_name"
     ./build.sh
 done

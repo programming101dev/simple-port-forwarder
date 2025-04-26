@@ -478,5 +478,3 @@ supported_cxx_compilers.txt
 sanitizers.txt
 
 .flags
-
-CMakeLists.txt
