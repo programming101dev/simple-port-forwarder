@@ -326,7 +326,7 @@ static p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_er
 
     P101_TRACE(env);
     data                = (struct server_data *)arg;
-    data->client_socket = p101_accept(env, err, data->server_socket, NULL, 0);
+    data->client_socket = p101_accept(env, err, data->server_socket, NULL, NULL);
 
     if(p101_error_has_error(err))
     {

@@ -53,12 +53,13 @@ int main(int argc, char *argv[])
 {
     struct p101_error *err;
     struct p101_env   *env;
-    struct arguments   args = {0};
-    struct settings    sets = {0};
+    struct arguments   args;
+    struct settings    sets;
     int                exit_code;
 
     err = p101_error_create(true);
     env = p101_env_create(err, true, NULL);
+    p101_memset(env, &args, 0, sizeof(args));
     parse_arguments(env, argc, argv, &args);
 
     if(args.verbose || args.very_verbose)
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
     }
 
     check_arguments(env, argv[0], &args);
+    p101_memset(env, &sets, 0, sizeof(sets));
     convert_arguments(env, err, &args, &sets);
 
     if(p101_error_has_error(err))
