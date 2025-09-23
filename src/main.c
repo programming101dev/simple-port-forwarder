@@ -47,7 +47,7 @@ static void           check_arguments(const struct p101_env *env, const char *bi
 static void           convert_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args, struct settings *sets);
 _Noreturn static void usage(const struct p101_env *env, const char *program_name, int exit_code, const char *message);
 
-#define UNKNOWN_OPTION_MESSAGE_LEN 24
+#define UNKNOWN_OPTION_MESSAGE_LEN 24    // NOLINT(cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 
 int main(int argc, char *argv[])
 {

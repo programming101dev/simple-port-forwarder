@@ -14,7 +14,7 @@
 #include <string.h>
 #include <sys/socket.h>
 
-#define BASE_TEN 10
+#define BASE_TEN 10    // NOLINT(cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 
 in_port_t parse_in_port_t(const struct p101_env *env, struct p101_error *error, const char *str)
 {
