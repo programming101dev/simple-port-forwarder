@@ -245,56 +245,56 @@ static void check_arguments(const struct p101_env *env, const char *binary_name,
     }
 }
 
-static void convert_arguments(const struct p101_env *env, struct p101_error *error, const struct arguments *args, struct settings *sets)
+static void convert_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args, struct settings *sets)
 {
     time_t min_time_t;
     time_t max_time_t;
 
     P101_TRACE(env);
-    min_time_t         = get_time_t_min(env, error);
-    max_time_t         = get_time_t_max(env, error);
+    min_time_t         = get_time_t_min(env, err);
+    max_time_t         = get_time_t_max(env, err);
     sets->verbose      = args->verbose;
     sets->very_verbose = args->very_verbose;
-    sets->backlog      = parse_positive_int(env, error, args->backlog);
+    sets->backlog      = parse_positive_int(env, err, args->backlog);
 
-    if(p101_error_has_error(error))
+    if(p101_error_has_error(err))
     {
         goto done;
     }
 
-    convert_address(env, error, args->ip_address_in, &sets->addr_in);
+    convert_address(env, err, args->ip_address_in, &sets->addr_in);
 
-    if(p101_error_has_error(error))
+    if(p101_error_has_error(err))
     {
         goto done;
     }
 
-    sets->port_in = parse_in_port_t(env, error, args->port_in);
+    sets->port_in = parse_in_port_t(env, err, args->port_in);
 
-    if(p101_error_has_error(error))
+    if(p101_error_has_error(err))
     {
         goto done;
     }
 
-    convert_address(env, error, args->ip_address_out, &sets->addr_out);
+    convert_address(env, err, args->ip_address_out, &sets->addr_out);
 
-    if(p101_error_has_error(error))
+    if(p101_error_has_error(err))
     {
         goto done;
     }
 
-    sets->port_out = parse_in_port_t(env, error, args->port_out);
+    sets->port_out = parse_in_port_t(env, err, args->port_out);
 
-    if(p101_error_has_error(error))
+    if(p101_error_has_error(err))
     {
         goto done;
     }
 
     if(args->min_seconds)
     {
-        sets->min_seconds = parse_time_t(env, error, min_time_t, max_time_t, args->min_seconds);
+        sets->min_seconds = parse_time_t(env, err, min_time_t, max_time_t, args->min_seconds);
 
-        if(p101_error_has_error(error))
+        if(p101_error_has_error(err))
         {
             goto done;
         }
@@ -302,9 +302,9 @@ static void convert_arguments(const struct p101_env *env, struct p101_error *err
 
     if(args->max_seconds)
     {
-        sets->max_seconds = parse_time_t(env, error, min_time_t, max_time_t, args->max_seconds);
+        sets->max_seconds = parse_time_t(env, err, min_time_t, max_time_t, args->max_seconds);
 
-        if(p101_error_has_error(error))
+        if(p101_error_has_error(err))
         {
             goto done;
         }
@@ -312,9 +312,9 @@ static void convert_arguments(const struct p101_env *env, struct p101_error *err
 
     if(args->min_nanoseconds)
     {
-        sets->min_nanoseconds = parse_long(env, error, args->min_nanoseconds);
+        sets->min_nanoseconds = parse_long(env, err, args->min_nanoseconds);
 
-        if(p101_error_has_error(error))
+        if(p101_error_has_error(err))
         {
             goto done;
         }
@@ -322,9 +322,9 @@ static void convert_arguments(const struct p101_env *env, struct p101_error *err
 
     if(args->max_nanoseconds)
     {
-        sets->max_nanoseconds = parse_long(env, error, args->max_nanoseconds);
+        sets->max_nanoseconds = parse_long(env, err, args->max_nanoseconds);
 
-        if(p101_error_has_error(error))
+        if(p101_error_has_error(err))
         {
             goto done;
         }
@@ -332,9 +332,9 @@ static void convert_arguments(const struct p101_env *env, struct p101_error *err
 
     if(args->min_bytes)
     {
-        sets->min_bytes = parse_unsigned_int(env, error, args->min_bytes);
+        sets->min_bytes = parse_unsigned_int(env, err, args->min_bytes);
 
-        if(p101_error_has_error(error))
+        if(p101_error_has_error(err))
         {
             goto done;
         }
@@ -342,9 +342,9 @@ static void convert_arguments(const struct p101_env *env, struct p101_error *err
 
     if(args->max_bytes)
     {
-        sets->max_bytes = parse_unsigned_int(env, error, args->max_bytes);
+        sets->max_bytes = parse_unsigned_int(env, err, args->max_bytes);
 
-        if(p101_error_has_error(error))
+        if(p101_error_has_error(err))
         {
             goto done;
         }
