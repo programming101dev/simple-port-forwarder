@@ -40,5 +40,6 @@ set(main_LINK_LIBRARIES
         p101_fsm
         p101_unix
         m
+        iconv
         )
 
