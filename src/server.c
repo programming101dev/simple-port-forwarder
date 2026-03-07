@@ -471,6 +471,8 @@ static void *copy_handler(void *arg)
 
     do
     {
+        const char *closed_str;
+
         closed = copy(data->env, data->err, data->to_fd, data->from_fd, data->sets);
 
         if(p101_error_has_error(data->err))
@@ -478,8 +480,17 @@ static void *copy_handler(void *arg)
             goto done;
         }
 
-        printf("closed %d -> %d?: %d\n", data->from_fd, data->to_fd, closed);
-    } while(!(closed));
+        if(closed)
+        {
+            closed_str = "true";
+        }
+        else
+        {
+            closed_str = "false";
+        }
+
+        printf("closed %d -> %d?: %s\n", data->from_fd, data->to_fd, closed_str);
+    } while(!closed);
 
 done:
     printf("Ending thread\n");
