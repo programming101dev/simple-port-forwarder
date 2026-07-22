@@ -91,6 +91,10 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     struct server_data data;
 
     P101_TRACE(env);
+    fsm_err = NULL;
+    fsm_env = NULL;
+    fsm     = NULL;
+
     check_settings(env, err, sets);
 
     if(p101_error_has_error(err))
@@ -121,10 +125,11 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     }
 
     fsm_err = p101_error_create(false);
-    fsm_env = p101_env_create(err, true, NULL);
+    fsm_env = p101_env_create(fsm_err, NULL);
 
-    if(p101_error_has_error(err))
+    if(p101_error_has_error(fsm_err))
     {
+        P101_ERROR_RAISE_USER(err, p101_error_get_message(fsm_err), 1);
         goto error;
     }
 
@@ -134,17 +139,6 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     }
 
     fsm = p101_fsm_info_create(env, err, "test-fsm", fsm_env, fsm_err, NULL);
-
-    if(sets->very_verbose)
-    {
-        p101_fsm_info_set_bad_change_state_notifier(fsm, p101_fsm_info_default_bad_change_state_notifier);
-        p101_fsm_info_set_will_change_state_notifier(fsm, p101_fsm_info_default_will_change_state_notifier);
-        p101_fsm_info_set_did_change_state_notifier(fsm, p101_fsm_info_default_did_change_state_notifier);
-    }
-
-    data.sets = sets;
-    p101_fsm_run(fsm, &from_state, &to_state, &data, transitions, sizeof(transitions));
-    p101_fsm_info_destroy(env, &fsm);
 
     if(p101_error_has_error(fsm_err))
     {
@@ -156,10 +150,37 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
         goto error;
     }
 
-    return;
+    if(sets->very_verbose)
+    {
+        p101_fsm_info_set_bad_change_state_notifier(fsm, p101_fsm_info_default_bad_change_state_notifier);
+        p101_fsm_info_set_will_change_state_notifier(fsm, p101_fsm_info_default_will_change_state_notifier);
+        p101_fsm_info_set_did_change_state_notifier(fsm, p101_fsm_info_default_did_change_state_notifier);
+    }
+
+    data.sets = sets;
+    p101_fsm_run(fsm, &from_state, &to_state, &data, transitions, sizeof(transitions));
+    if(p101_error_has_error(fsm_err))
+    {
+        goto error;
+    }
+
+    if(p101_error_has_error(err))
+    {
+        goto error;
+    }
+
+    goto done;
 
 error:
-    return;
+    if(p101_error_has_no_error(err) && p101_error_has_error(fsm_err))
+    {
+        P101_ERROR_RAISE_USER(err, p101_error_get_message(fsm_err), 1);
+    }
+
+done:
+    p101_fsm_info_destroy(env, &fsm);
+    p101_env_destroy(fsm_env);
+    p101_error_destroy(fsm_err);
 }
 
 static void check_settings(const struct p101_env *env, struct p101_error *err, const struct settings *sets)
@@ -553,7 +574,7 @@ static bool copy(const struct p101_env *env, struct p101_error *err, int to_fd, 
                 }
                 else
                 {
-                    bytes_to_write = p101_arc4random_uniform(env, (uint32_t)(sets->max_bytes - sets->min_bytes + 1)) + sets->min_bytes;
+                    bytes_to_write = p101_arc4random_uniform(env, sets->max_bytes - sets->min_bytes + 1) + sets->min_bytes;
                 }
 
                 if(bytes_to_write > bytes_remaining)

@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     int                exit_code;
 
     err = p101_error_create(true);
-    env = p101_env_create(err, true, NULL);
+    env = p101_env_create(err, NULL);
     p101_memset(env, &args, 0, sizeof(args));
     parse_arguments(env, argc, argv, &args);
 
@@ -91,9 +91,8 @@ error:
     exit_code = EXIT_FAILURE;
 
 done:
-    p101_error_reset(err);
-    free(env);
-    free(err);
+    p101_env_destroy(env);
+    p101_error_destroy(err);
 
     return exit_code;
 }

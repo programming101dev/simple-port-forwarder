@@ -151,7 +151,7 @@ time_t parse_time_t(const struct p101_env *env, struct p101_error *error, time_t
     }
 
 done:
-    return (time_t)parsed_value;
+    return parsed_value;
 }
 
 long parse_long(const struct p101_env *env, struct p101_error *error, const char *str)
@@ -184,7 +184,7 @@ long parse_long(const struct p101_env *env, struct p101_error *error, const char
     }
 
 done:
-    return (long)parsed_value;
+    return parsed_value;
 }
 
 int parse_positive_int(const struct p101_env *env, struct p101_error *error, const char *str)
