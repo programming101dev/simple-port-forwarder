@@ -11,10 +11,16 @@
 #include <p101_c/p101_string.h>
 #include <p101_posix/arpa/p101_inet.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 
 #define BASE_TEN 10    // NOLINT(cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
+
+enum
+{
+    CONVERT_ERROR_MESSAGE_LEN = 256
+};
 
 in_port_t parse_in_port_t(const struct p101_env *env, struct p101_error *error, const char *str)
 {
@@ -133,20 +139,20 @@ time_t parse_time_t(const struct p101_env *env, struct p101_error *error, time_t
 
     if(errno != 0)
     {
-        P101_ERROR_RAISE_SYSTEM(error, "", 1);
+        P101_ERROR_RAISE_USER(error, "Error parsing time_t.", 1);
         goto done;
     }
 
     // Check if there are any non-numeric characters in the input string
     if(*endptr != '\0')
     {
-        P101_ERROR_RAISE_SYSTEM(error, "", 2);
+        P101_ERROR_RAISE_USER(error, "Invalid characters in time_t input.", 2);
         goto done;
     }
 
     if(parsed_value < min || parsed_value > max)
     {
-        P101_ERROR_RAISE_SYSTEM(error, "", 3);
+        P101_ERROR_RAISE_USER(error, "time_t value out of range.", 3);
         goto done;
     }
 
@@ -165,21 +171,21 @@ long parse_long(const struct p101_env *env, struct p101_error *error, const char
 
     if(errno != 0)
     {
-        P101_ERROR_RAISE_SYSTEM(error, "", 1);
+        P101_ERROR_RAISE_USER(error, "Error parsing long.", 1);
         goto done;
     }
 
     // Check if there are any non-numeric characters in the input string
     if(*endptr != '\0')
     {
-        P101_ERROR_RAISE_SYSTEM(error, "", 2);
+        P101_ERROR_RAISE_USER(error, "Invalid characters in long input.", 2);
         goto done;
     }
 
     // Check if the parsed value is within the valid range for signed long
     if(parsed_value < LONG_MIN || parsed_value > LONG_MAX)
     {
-        P101_ERROR_RAISE_SYSTEM(error, "", 3);
+        P101_ERROR_RAISE_USER(error, "long value out of range.", 3);
         goto done;
     }
 
@@ -274,10 +280,10 @@ void convert_address(const struct p101_env *env, struct p101_error *error, const
     }
     else
     {
-        // TODO: need to fix this to show the bad address
-        P101_ERROR_RAISE_USER(error, "is not an IPv4 or an IPv6 address", 1);
-        //        fprintf(stderr, "%s is not an IPv4 or an IPv6 address\n",
-        //        address);
+        char message[CONVERT_ERROR_MESSAGE_LEN];
+
+        snprintf(message, sizeof(message), "%s is not an IPv4 or an IPv6 address", address);
+        P101_ERROR_RAISE_USER(error, message, 1);
     }
 }
 
@@ -292,11 +298,15 @@ void sockaddr_to_string(const struct p101_env *env, struct p101_error *err, cons
         addr_in = (const struct sockaddr_in *)addr;
         p101_inet_ntop(env, err, AF_INET, &addr_in->sin_addr, ipstr, max_size);
     }
-    else
+    else if(addr->ss_family == AF_INET6)
     {
         const struct sockaddr_in6 *addr_in6;
 
         addr_in6 = (const struct sockaddr_in6 *)addr;
         p101_inet_ntop(env, err, AF_INET6, &addr_in6->sin6_addr, ipstr, max_size);
+    }
+    else
+    {
+        P101_ERROR_RAISE_USER(err, "sockaddr family must be AF_INET or AF_INET6", 1);
     }
 }

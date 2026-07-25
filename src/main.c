@@ -193,7 +193,7 @@ static void parse_arguments(const struct p101_env *env, int argc, char *argv[], 
         }
     }
 
-    if(optind > argc)
+    if(optind < argc)
     {
         usage(env, argv[0], EXIT_FAILURE, "Error: Too many arguments.");
     }
@@ -363,7 +363,7 @@ _Noreturn static void usage(const struct p101_env *env, const char *program_name
     }
 
     fprintf(stderr,
-            "Usage: %s [-h] [-v] [-V] -l <backlog> -a <listening ip address> -p <listening port> -A <forwarding ip address> -P <forwarding port> [-s <min seconds> -S <max seconds> -n <min nanoseconds> -N <max nanoseconds> -b <num bytes> -B <max bytes>]\n",
+            "Usage: %s [-h] [-v] [-V] -l <backlog> -a <listening ip address> -p <listening port> -A <forwarding ip address> -P <forwarding port> [-s <min seconds> -S <max seconds> -n <min nanoseconds> -N <max nanoseconds> -b <min bytes> -B <max bytes>]\n",
             program_name);
     fputs("Options:\n", stderr);
     fputs("  -h Display this help message\n", stderr);
@@ -372,12 +372,12 @@ _Noreturn static void usage(const struct p101_env *env, const char *program_name
     fputs("  -p <listening port> the port to listen to\n", stderr);
     fputs("  -A <forwarding ip address> the ip address to forward to\n", stderr);
     fputs("  -P <forwarding port> the port to forward to\n", stderr);
-    fputs("  -s <min seconds> minimum number of seconds to delay between packets", stderr);
-    fputs("  -S <max seconds> maximum number of seconds to delay between packets", stderr);
-    fputs("  -n <min nanoseconds> minimum number of nanoseconds to delay between packets", stderr);
-    fputs("  -N <max nanoseconds> maximum number of nanoseconds to delay between packets", stderr);
-    fputs("  -b <num bytes> minimum number of bytes to send per packet", stderr);
-    fputs("  -B <max bytes> maximum number of bytes to send per packet", stderr);
+    fputs("  -s <min seconds> minimum number of seconds to delay between packets\n", stderr);
+    fputs("  -S <max seconds> maximum number of seconds to delay between packets\n", stderr);
+    fputs("  -n <min nanoseconds> minimum number of nanoseconds to delay between packets\n", stderr);
+    fputs("  -N <max nanoseconds> maximum number of nanoseconds to delay between packets\n", stderr);
+    fputs("  -b <min bytes> minimum number of bytes to send per packet\n", stderr);
+    fputs("  -B <max bytes> maximum number of bytes to send per packet\n", stderr);
     fputs("  -v verbose\n", stderr);
     fputs("  -V very verbose\n", stderr);
     exit(exit_code);
