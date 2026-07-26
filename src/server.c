@@ -2,8 +2,11 @@
 #include "convert.h"
 #include <arpa/inet.h>
 #include <errno.h>
+#include <p101_c/p101_stdatomic.h>
+#include <p101_c/p101_stdio.h>
 #include <p101_c/p101_string.h>
 #include <p101_fsm/fsm.h>
+#include <p101_posix/arpa/p101_inet.h>
 #include <p101_posix/p101_pthread.h>
 #include <p101_posix/p101_signal.h>
 #include <p101_posix/p101_time.h>
@@ -11,7 +14,6 @@
 #include <p101_posix/sys/p101_socket.h>
 #include <p101_unix/p101_stdlib.h>
 #include <signal.h>
-#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -123,7 +125,7 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
         goto error;
     }
 
-    printf("Starting port forwarder %s:%d -> %s:%d\n", ip_in_str, sets->port_in, ip_out_str, sets->port_out);
+    p101_printf(env, err, "Starting port forwarder %s:%d -> %s:%d\n", ip_in_str, sets->port_in, ip_out_str, sets->port_out);
     setup_signal_handler(env, err);
 
     if(p101_error_has_error(err))
@@ -288,16 +290,11 @@ done:
     return;
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-
-// TODO: actually add this to the FSM
 static void sigint_handler(const int signum)
 {
+    (void)signum;
     exit_flag = 1;
 }
-
-#pragma GCC diagnostic pop
 
 static p101_fsm_state_t socket_create(const struct p101_env *env, struct p101_error *err, void *arg)
 {
@@ -329,7 +326,7 @@ static p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_erro
 
     P101_TRACE(env);
     data     = (struct server_data *)arg;
-    net_port = htons(data->sets->port_in);
+    net_port = p101_htons(env, data->sets->port_in);
 
     if(data->sets->addr_in.ss_family == AF_INET)
     {
@@ -463,17 +460,15 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
     p101_fsm_state_t    next_state;
     socklen_t           addr_len;
     in_port_t           net_port;
-    pthread_t           from_forwarder;
+    pthread_t           from_forwarder = p101_pthread_self(env);
     struct copy_data    from_data;
-    pthread_t           to_forwarder;
+    pthread_t           to_forwarder = p101_pthread_self(env);
     struct copy_data    to_data;
     bool                from_started;
     bool                to_started;
 
     P101_TRACE(env);
-    printf("Handing connection\n");
-    p101_memset(env, &from_forwarder, 0, sizeof(from_forwarder));
-    p101_memset(env, &to_forwarder, 0, sizeof(to_forwarder));
+    p101_printf(env, err, "Handing connection\n");
     data         = (struct server_data *)arg;
     from_started = false;
     to_started   = false;
@@ -485,7 +480,7 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
         goto error;
     }
 
-    net_port = htons(data->sets->port_out);
+    net_port = p101_htons(env, data->sets->port_out);
 
     if(data->sets->addr_out.ss_family == AF_INET)
     {
@@ -509,7 +504,7 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
         goto error;
     }
 
-    printf("Connecting to server\n");
+    p101_printf(env, err, "Connecting to server\n");
     p101_connect(env, err, data->forward_socket, (struct sockaddr *)&data->sets->addr_out, addr_len);
 
     if(p101_error_has_error(err))
@@ -517,8 +512,8 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
         goto error;
     }
 
-    printf("Connected to server\n");
-    atomic_store(&active_threads, 0);
+    p101_printf(env, err, "Connected to server\n");
+    p101_atomic_uint_store(env, &active_threads, 0);
     from_started = start_copy_thread(env, err, &from_forwarder, &from_data, data->sets, data->forward_socket, data->client_socket);
 
     if(p101_error_has_error(err))
@@ -541,19 +536,19 @@ static p101_fsm_state_t handle_connection(const struct p101_env *env, struct p10
         goto error;
     }
 
-    //    printf("active threads = %u\n", atomic_load(&active_threads));
+    //    p101_printf(env, err, "active threads = %u\n", p101_atomic_uint_load(env, &active_threads));
 
-    while(atomic_load(&active_threads) > 0)
+    while(p101_atomic_uint_load(env, &active_threads) > 0)
     {
-        printf("active threads = %u\n", atomic_load(&active_threads));
-        printf("waiting on condition\n");
+        p101_printf(env, err, "active threads = %u\n", p101_atomic_uint_load(env, &active_threads));
+        p101_printf(env, err, "waiting on condition\n");
         p101_pthread_cond_wait(env, err, &cond, &lock);
         if(p101_error_has_error(err))
         {
             (void)p101_pthread_mutex_unlock(env, NULL, &lock);
             goto error;
         }
-        printf("condition done\n");
+        p101_printf(env, err, "condition done\n");
     }
 
     p101_pthread_mutex_unlock(env, err, &lock);
@@ -609,7 +604,7 @@ error:
     next_state = CLEANUP;
 
 done:
-    printf("Connection handled\n");
+    p101_printf(env, err, "Connection handled\n");
 
     return next_state;
 }
@@ -624,12 +619,12 @@ static bool start_copy_thread(const struct p101_env *env, struct p101_error *err
     data->from_fd = from_socket;
     data->to_fd   = to_socket;
 
-    atomic_fetch_add(&active_threads, 1);
+    p101_atomic_uint_fetch_add(env, &active_threads, 1);
     p101_pthread_create(env, err, forwarder_thread, NULL, copy_handler, data);
 
     if(p101_error_has_error(err))
     {
-        atomic_fetch_sub(&active_threads, 1);
+        p101_atomic_uint_fetch_sub(env, &active_threads, 1);
     }
     else
     {
@@ -650,7 +645,7 @@ static void *copy_handler(void *arg)
 
     if(err == NULL)
     {
-        fprintf(stderr, "Unable to create copy thread error object\n");
+        p101_fprintf(data->env, NULL, stderr, "Unable to create copy thread error object\n");
         goto done;
     }
 
@@ -662,7 +657,7 @@ static void *copy_handler(void *arg)
 
         if(p101_error_has_error(err))
         {
-            fprintf(stderr, "Copy thread error: %s\n", p101_error_get_message(err));
+            p101_fprintf(data->env, err, stderr, "Copy thread error: %s\n", p101_error_get_message(err));
             goto done;
         }
 
@@ -675,14 +670,14 @@ static void *copy_handler(void *arg)
             closed_str = "false";
         }
 
-        printf("closed %d -> %d?: %s\n", data->from_fd, data->to_fd, closed_str);
+        p101_printf(data->env, err, "closed %d -> %d?: %s\n", data->from_fd, data->to_fd, closed_str);
     } while(!closed);
 
 done:
     shutdown_socket(data->env, data->to_fd, SHUT_WR);
+    p101_printf(data->env, err, "Ending thread\n");
     p101_error_destroy(err);
-    printf("Ending thread\n");
-    atomic_fetch_sub(&active_threads, 1);
+    p101_atomic_uint_fetch_sub(data->env, &active_threads, 1);
     p101_pthread_mutex_lock(data->env, NULL, &lock);
     p101_pthread_cond_signal(data->env, NULL, &cond);
     p101_pthread_mutex_unlock(data->env, NULL, &lock);
@@ -697,9 +692,9 @@ static bool copy(const struct p101_env *env, struct p101_error *err, int to_fd, 
     bool    closed;
 
     closed = false;
-    printf("Reading from %d to send to %d\n", from_fd, to_fd);
+    p101_printf(env, err, "Reading from %d to send to %d\n", from_fd, to_fd);
     bytes_read = p101_read(env, err, from_fd, buffer, BUFFER_LEN);
-    printf("Read %zd from %d to send to %d\n", bytes_read, from_fd, to_fd);
+    p101_printf(env, err, "Read %zd from %d to send to %d\n", bytes_read, from_fd, to_fd);
 
     if(p101_error_has_error(err))
     {
@@ -791,14 +786,14 @@ static bool copy(const struct p101_env *env, struct p101_error *err, int to_fd, 
                 goto done;
             }
 
-            // TODO: if verbose
-            /*
-            printf("\n----\n");
-            fflush(stdout);
-            p101_write(env, err, STDOUT_FILENO, &buffer[pos], (size_t)bytes_written);
-            fflush(stdout);
-            printf("\n----\n");
-            */
+            if(sets->very_verbose)
+            {
+                p101_printf(env, err, "\n----\n");
+                p101_fflush(env, err, stdout);
+                p101_write(env, err, STDOUT_FILENO, &buffer[pos], (size_t)bytes_written);
+                p101_fflush(env, err, stdout);
+                p101_printf(env, err, "\n----\n");
+            }
             if(p101_error_has_error(err))
             {
                 goto done;
@@ -876,7 +871,7 @@ static void close_socket(const struct p101_env *env, struct p101_error *err, int
 
         socket_to_close = *socket;
         *socket         = -1;
-        printf("closing %d\n", socket_to_close);
+        p101_printf(env, err, "closing %d\n", socket_to_close);
         p101_close(env, err, socket_to_close);
     }
 }

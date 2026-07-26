@@ -4,15 +4,16 @@
 
 #include "convert.h"
 #include <arpa/inet.h>
-#include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <netinet/in.h>
+#include <p101_c/p101_inttypes.h>
+#include <p101_c/p101_stdio.h>
 #include <p101_c/p101_string.h>
+#include <p101_convert/integer.h>
 #include <p101_posix/arpa/p101_inet.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/socket.h>
 
 #define BASE_TEN 10    // NOLINT(cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
@@ -24,40 +25,12 @@ enum
 
 in_port_t parse_in_port_t(const struct p101_env *env, struct p101_error *error, const char *str)
 {
-    char     *endptr;
-    uintmax_t parsed_value;
+    uint16_t parsed_value;
 
     P101_TRACE(env);
-    errno        = 0;
-    parsed_value = strtoumax(str, &endptr, BASE_TEN);
+    parsed_value = p101_parse_uint16_t(env, error, str, 0);
 
-    if(errno != 0)
-    {
-        P101_ERROR_RAISE_USER(error, "Error parsing in_port_t", 1);
-        parsed_value = 0;
-        goto done;
-    }
-
-    // Check if there are any non-numeric characters in the input string
-    if(*endptr != '\0')
-    {
-        P101_ERROR_RAISE_USER(error, "Invalid characters in input.", 2);
-        parsed_value = 0;
-        goto done;
-    }
-    else
-    {
-        // Check if the parsed value is within the valid range for in_port_t
-        if(parsed_value > UINT16_MAX)
-        {
-            P101_ERROR_RAISE_USER(error, "in_port_t value out of range.", 3);
-            parsed_value = 0;
-            goto done;
-        }
-    }
-
-done:
-    return (in_port_t)parsed_value;
+    return parsed_value;
 }
 
 time_t get_time_t_min(const struct p101_env *env, struct p101_error *error)
@@ -134,10 +107,9 @@ time_t parse_time_t(const struct p101_env *env, struct p101_error *error, time_t
     intmax_t parsed_value;
 
     P101_TRACE(env);
-    errno        = 0;
-    parsed_value = strtoimax(str, &endptr, BASE_TEN);
+    parsed_value = p101_strtoimax(env, error, str, &endptr, BASE_TEN);
 
-    if(errno != 0)
+    if(p101_error_has_error(error))
     {
         P101_ERROR_RAISE_USER(error, "Error parsing time_t.", 1);
         goto done;
@@ -160,121 +132,16 @@ done:
     return parsed_value;
 }
 
-long parse_long(const struct p101_env *env, struct p101_error *error, const char *str)
-{
-    char    *endptr;
-    intmax_t parsed_value;
-
-    P101_TRACE(env);
-    errno        = 0;
-    parsed_value = strtoimax(str, &endptr, BASE_TEN);
-
-    if(errno != 0)
-    {
-        P101_ERROR_RAISE_USER(error, "Error parsing long.", 1);
-        goto done;
-    }
-
-    // Check if there are any non-numeric characters in the input string
-    if(*endptr != '\0')
-    {
-        P101_ERROR_RAISE_USER(error, "Invalid characters in long input.", 2);
-        goto done;
-    }
-
-    // Check if the parsed value is within the valid range for signed long
-    if(parsed_value < LONG_MIN || parsed_value > LONG_MAX)
-    {
-        P101_ERROR_RAISE_USER(error, "long value out of range.", 3);
-        goto done;
-    }
-
-done:
-    return parsed_value;
-}
-
-int parse_positive_int(const struct p101_env *env, struct p101_error *error, const char *str)
-{
-    char    *endptr;
-    intmax_t parsed_value;
-
-    P101_TRACE(env);
-    errno        = 0;
-    parsed_value = strtoimax(str, &endptr, BASE_TEN);
-
-    if(errno != 0)
-    {
-        P101_ERROR_RAISE_USER(error, "Error parsing integer.", 1);
-        parsed_value = 0;
-        goto done;
-    }
-
-    // Check if there are any non-numeric characters in the input string
-    if(*endptr != '\0')
-    {
-        P101_ERROR_RAISE_USER(error, "Invalid characters in input.", 2);
-        parsed_value = 0;
-        goto done;
-    }
-
-    // Check if the parsed value is non-negative
-    if(parsed_value < 0 || parsed_value > INT_MAX)
-    {
-        P101_ERROR_RAISE_USER(error, "Integer out of range or negative.", 2);
-        parsed_value = 0;
-        goto done;
-    }
-
-done:
-    return (int)parsed_value;
-}
-
-unsigned int parse_unsigned_int(const struct p101_env *env, struct p101_error *error, const char *str)
-{
-    char     *endptr;
-    uintmax_t parsed_value;
-
-    P101_TRACE(env);
-    errno        = 0;
-    parsed_value = strtoumax(str, &endptr, BASE_TEN);
-
-    if(errno != 0)
-    {
-        P101_ERROR_RAISE_USER(error, "Error parsing unsigned integer.", 1);
-        parsed_value = 0;
-        goto done;
-    }
-
-    // Check if there are any non-numeric characters in the input string
-    if(*endptr != '\0')
-    {
-        P101_ERROR_RAISE_USER(error, "Invalid characters in input.", 2);
-        parsed_value = 0;
-        goto done;
-    }
-
-    // Check if the parsed value is non-negative
-    if(parsed_value > UINT_MAX)
-    {
-        P101_ERROR_RAISE_USER(error, "Integer out of range or negative.", 2);
-        parsed_value = 0;
-        goto done;
-    }
-
-done:
-    return (unsigned int)parsed_value;
-}
-
 void convert_address(const struct p101_env *env, struct p101_error *error, const char *address, struct sockaddr_storage *addr)
 {
     P101_TRACE(env);
-    memset(addr, 0, sizeof(*addr));
+    p101_memset(env, addr, 0, sizeof(*addr));
 
-    if(inet_pton(AF_INET, address, &(((struct sockaddr_in *)addr)->sin_addr)) == 1)
+    if(p101_inet_pton(env, NULL, AF_INET, address, &(((struct sockaddr_in *)addr)->sin_addr)) == 1)
     {
         addr->ss_family = AF_INET;
     }
-    else if(inet_pton(AF_INET6, address, &(((struct sockaddr_in6 *)addr)->sin6_addr)) == 1)
+    else if(p101_inet_pton(env, NULL, AF_INET6, address, &(((struct sockaddr_in6 *)addr)->sin6_addr)) == 1)
     {
         addr->ss_family = AF_INET6;
     }
@@ -282,7 +149,7 @@ void convert_address(const struct p101_env *env, struct p101_error *error, const
     {
         char message[CONVERT_ERROR_MESSAGE_LEN];
 
-        snprintf(message, sizeof(message), "%s is not an IPv4 or an IPv6 address", address);
+        p101_snprintf(env, error, message, sizeof(message), "%s is not an IPv4 or an IPv6 address", address);
         P101_ERROR_RAISE_USER(error, message, 1);
     }
 }
