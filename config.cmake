@@ -29,14 +29,27 @@ set(EXECUTABLE_TARGETS main)
 set(LIBRARY_TARGETS "")
 
 set(main_SOURCES
+        src/cli.c
         src/main.c
         src/convert.c
         src/server.c
+        src/server_connection.c
+        src/server_settings.c
+        src/server_signal.c
+        src/server_socket.c
+        src/server_state.c
 )
 
 set(main_HEADERS
+        include/cli.h
         include/convert.h
         include/server.h
+        include/settings.h
+        include/server_connection.h
+        include/server_settings.h
+        include/server_signal.h
+        include/server_socket.h
+        include/server_state.h
 )
 
 set(main_LINK_LIBRARIES
