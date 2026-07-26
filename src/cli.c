@@ -311,5 +311,3 @@ void convert_arguments(const struct p101_env *env, struct p101_error *err, const
 done:
     return;
 }
-
-#define OPTION_MESSAGE_LEN 64    // NOLINT(cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
