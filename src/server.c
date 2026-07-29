@@ -11,26 +11,26 @@
 
 void run_server(const struct p101_env *env, struct p101_error *err, struct settings *sets)
 {
-    char                              ip_in_str[INET6_ADDRSTRLEN];
-    char                              ip_out_str[INET6_ADDRSTRLEN];
-    struct p101_error                *fsm_err;
-    struct p101_env                  *fsm_env;
-    struct p101_fsm_info             *fsm;
-    p101_fsm_state_t                  from_state;
-    p101_fsm_state_t                  to_state;
-    static struct p101_fsm_transition transitions[] = {
-        {P101_FSM_INIT, SOCKET,        socket_create    },
-        {SOCKET,        BIND,          socket_bind      },
-        {SOCKET,        CLEANUP,       cleanup          },
-        {BIND,          LISTEN,        socket_listen    },
-        {BIND,          CLEANUP,       cleanup          },
-        {LISTEN,        ACCEPT,        socket_accept    },
-        {LISTEN,        CLEANUP,       cleanup          },
-        {ACCEPT,        HANDLE,        handle_connection},
-        {ACCEPT,        CLEANUP,       cleanup          },
-        {HANDLE,        ACCEPT,        socket_accept    },
-        {HANDLE,        CLEANUP,       cleanup          },
-        {CLEANUP,       P101_FSM_EXIT, NULL             }
+    char                                    ip_in_str[INET6_ADDRSTRLEN];
+    char                                    ip_out_str[INET6_ADDRSTRLEN];
+    struct p101_error                      *fsm_err;
+    struct p101_env                        *fsm_env;
+    struct p101_fsm_info                   *fsm;
+    p101_fsm_state_t                        from_state;
+    p101_fsm_state_t                        to_state;
+    p101_fsm_run_result                     fsm_result;
+    static const struct p101_fsm_transition transitions[] = {
+        {P101_FSM_INIT, SOCKET,  socket_create    },
+        {SOCKET,        BIND,    socket_bind      },
+        {SOCKET,        CLEANUP, cleanup          },
+        {BIND,          LISTEN,  socket_listen    },
+        {BIND,          CLEANUP, cleanup          },
+        {LISTEN,        ACCEPT,  socket_accept    },
+        {LISTEN,        CLEANUP, cleanup          },
+        {ACCEPT,        HANDLE,  handle_connection},
+        {ACCEPT,        CLEANUP, cleanup          },
+        {HANDLE,        ACCEPT,  socket_accept    },
+        {HANDLE,        CLEANUP, cleanup          }
     };
     struct server_data data;
 
@@ -106,7 +106,13 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     data.client_socket  = -1;
     data.forward_socket = -1;
 
-    p101_fsm_run(fsm, &from_state, &to_state, &data, transitions, sizeof(transitions));
+    fsm_result = p101_fsm_run(fsm, &from_state, &to_state, &data, transitions, sizeof(transitions) / sizeof(transitions[0]));
+    if(fsm_result != P101_FSM_RUN_EXITED && p101_error_has_no_error(err) && p101_error_has_no_error(fsm_err))
+    {
+        P101_ERROR_RAISE_USER(err, "Port-forwarder FSM stopped before exit", 1);
+        goto error;
+    }
+
     if(p101_error_has_error(fsm_err))
     {
         goto error;
