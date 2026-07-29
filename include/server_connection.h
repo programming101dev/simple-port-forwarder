@@ -4,7 +4,7 @@
 #include <p101_env/env.h>
 #include <p101_fsm/fsm.h>
 
-p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg);
-p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
+void handle_connection(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision);
+void cleanup(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision);
 
 #endif    // PORT_FORWARDER_SERVER_CONNECTION_H

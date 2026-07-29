@@ -28,7 +28,7 @@ static void  close_socket(const struct p101_env *env, struct p101_error *err, in
 static void  delay(const struct p101_env *env, struct p101_error *err, time_t min_seconds, time_t max_seconds, long min_nanoseconds, long max_nanoseconds);
 static long  generate_random_long(const struct p101_env *env, long min, long max);
 
-p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error *err, void *arg)
+void handle_connection(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision)
 {
     struct server_data *data;
     p101_fsm_state_t    next_state;
@@ -42,6 +42,7 @@ p101_fsm_state_t handle_connection(const struct p101_env *env, struct p101_error
     bool                to_started;
 
     P101_TRACE(env);
+    (void)sink;
     p101_printf(env, err, "Handing connection\n");
     data         = (struct server_data *)arg;
     from_started = false;
@@ -186,8 +187,7 @@ error:
 
 done:
     p101_printf(env, err, "Connection handled\n");
-
-    return next_state;
+    p101_fsm_decide_transition(decision, next_state);
 }
 
 static bool start_copy_thread(const struct p101_env *env, struct p101_error *err, pthread_t *forwarder_thread, struct copy_data *data, const struct settings *sets, int from_socket, int to_socket)
@@ -510,16 +510,17 @@ static long generate_random_long(const struct p101_env *env, long min, long max)
     return min + (long)(num % range);
 }
 
-p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
+void cleanup(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision)
 {
     struct server_data *data;
 
     P101_TRACE(env);
+    (void)sink;
     data = (struct server_data *)arg;
 
     close_socket(env, NULL, &data->client_socket);
     close_socket(env, NULL, &data->forward_socket);
     close_socket(env, err, &data->server_socket);
 
-    return P101_FSM_EXIT;
+    p101_fsm_decide_exit(decision);
 }

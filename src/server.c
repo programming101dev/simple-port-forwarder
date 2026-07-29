@@ -16,9 +16,8 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     struct p101_error                      *fsm_err;
     struct p101_env                        *fsm_env;
     struct p101_fsm_info                   *fsm;
-    p101_fsm_state_t                        from_state;
-    p101_fsm_state_t                        to_state;
     p101_fsm_run_result                     fsm_result;
+    struct p101_fsm_step_result             last_step;
     static const struct p101_fsm_transition transitions[] = {
         {P101_FSM_INIT, SOCKET,  socket_create    },
         {SOCKET,        BIND,    socket_bind      },
@@ -82,7 +81,7 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
         p101_env_set_tracer(fsm_env, p101_env_default_tracer);
     }
 
-    fsm = p101_fsm_info_create(env, err, "test-fsm", fsm_env, fsm_err, NULL);
+    fsm = p101_fsm_info_create(env, err, "port-forwarder", fsm_env, fsm_err, transitions, sizeof(transitions) / sizeof(transitions[0]), NULL);
 
     if(p101_error_has_error(fsm_err))
     {
@@ -106,7 +105,7 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     data.client_socket  = -1;
     data.forward_socket = -1;
 
-    fsm_result = p101_fsm_run(fsm, &from_state, &to_state, &data, transitions, sizeof(transitions) / sizeof(transitions[0]));
+    fsm_result = p101_fsm_run(fsm, &data, NULL, &last_step);
     if(fsm_result != P101_FSM_RUN_EXITED && p101_error_has_no_error(err) && p101_error_has_no_error(fsm_err))
     {
         P101_ERROR_RAISE_USER(err, "Port-forwarder FSM stopped before exit", 1);
@@ -132,7 +131,7 @@ error:
     }
 
 done:
-    p101_fsm_info_destroy(env, &fsm);
+    p101_fsm_info_destroy(env, fsm_err, &fsm);
     p101_env_destroy(fsm_env);
     p101_error_destroy(fsm_err);
 }

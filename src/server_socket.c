@@ -6,12 +6,13 @@
 #include <p101_posix/sys/p101_socket.h>
 #include <sys/socket.h>
 
-p101_fsm_state_t socket_create(const struct p101_env *env, struct p101_error *err, void *arg)
+void socket_create(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision)
 {
     struct server_data *data;
     p101_fsm_state_t    next_state;
 
     P101_TRACE(env);
+    (void)sink;
     data                = (struct server_data *)arg;
     data->server_socket = p101_socket(env, err, data->sets->addr_in.ss_family, SOCK_STREAM, 0);
 
@@ -24,10 +25,10 @@ p101_fsm_state_t socket_create(const struct p101_env *env, struct p101_error *er
         next_state = BIND;
     }
 
-    return next_state;
+    p101_fsm_decide_transition(decision, next_state);
 }
 
-p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_error *err, void *arg)
+void socket_bind(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision)
 {
     struct server_data *data;
     socklen_t           addr_len;
@@ -35,6 +36,7 @@ p101_fsm_state_t socket_bind(const struct p101_env *env, struct p101_error *err,
     p101_fsm_state_t    next_state;
 
     P101_TRACE(env);
+    (void)sink;
     data     = (struct server_data *)arg;
     net_port = p101_htons(env, data->sets->port_in);
 
@@ -81,15 +83,16 @@ error:
     next_state = CLEANUP;
 
 done:
-    return next_state;
+    p101_fsm_decide_transition(decision, next_state);
 }
 
-p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_error *err, void *arg)
+void socket_listen(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision)
 {
     const struct server_data *data;
     p101_fsm_state_t          next_state;
 
     P101_TRACE(env);
+    (void)sink;
     data = (struct server_data *)arg;
     p101_listen(env, err, data->server_socket, data->sets->backlog);
 
@@ -102,16 +105,17 @@ p101_fsm_state_t socket_listen(const struct p101_env *env, struct p101_error *er
         next_state = ACCEPT;
     }
 
-    return next_state;
+    p101_fsm_decide_transition(decision, next_state);
 }
 
-p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *err, void *arg)
+void socket_accept(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision)
 {
     struct p101_error  *accept_err;
     struct server_data *data;
     p101_fsm_state_t    next_state;
 
     P101_TRACE(env);
+    (void)sink;
     accept_err = NULL;
     data       = (struct server_data *)arg;
 
@@ -168,5 +172,5 @@ p101_fsm_state_t socket_accept(const struct p101_env *env, struct p101_error *er
 done:
     p101_error_destroy(accept_err);
 
-    return next_state;
+    p101_fsm_decide_transition(decision, next_state);
 }
