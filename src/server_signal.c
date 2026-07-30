@@ -10,7 +10,7 @@ void setup_signal_handler(const struct p101_env *env, struct p101_error *err)
 {
     struct sigaction sa;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     p101_memset(env, &sa, 0, sizeof(sa));
 
 #ifdef __clang__

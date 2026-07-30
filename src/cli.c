@@ -13,7 +13,7 @@
 
 _Noreturn void usage(const struct p101_env *env, struct p101_error *err, const char *program_name, int exit_code, const char *message)
 {
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
 
     if(message)
     {
@@ -48,7 +48,7 @@ void parse_arguments(const struct p101_env *env, struct p101_error *err, int arg
 {
     int opt;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     opterr = 0;
 
     while((opt = p101_getopt(env, argc, argv, ":hvVl:a:p:A:P:s:S:n:N:b:B:")) != -1)
@@ -160,7 +160,7 @@ void parse_arguments(const struct p101_env *env, struct p101_error *err, int arg
 
 void check_arguments(const struct p101_env *env, struct p101_error *err, const char *binary_name, const struct arguments *args)
 {
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
 
     if(args->backlog == NULL)
     {
@@ -208,7 +208,7 @@ void convert_arguments(const struct p101_env *env, struct p101_error *err, const
     time_t min_time_t;
     time_t max_time_t;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     min_time_t         = get_time_t_min(env, err);
     max_time_t         = get_time_t_max(env, err);
     sets->verbose      = args->verbose;

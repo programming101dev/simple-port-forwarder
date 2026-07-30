@@ -7,7 +7,7 @@
 
 void check_settings(const struct p101_env *env, struct p101_error *err, const struct settings *sets)
 {
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
 
     if(sets->min_seconds > sets->max_seconds)
     {

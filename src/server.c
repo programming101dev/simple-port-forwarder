@@ -33,7 +33,7 @@ void run_server(const struct p101_env *env, struct p101_error *err, struct setti
     };
     struct server_data data;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     fsm_err = NULL;
     fsm_env = NULL;
     fsm     = NULL;

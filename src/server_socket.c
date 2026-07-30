@@ -11,7 +11,7 @@ void socket_create(const struct p101_env *env, struct p101_error *err, void *arg
     struct server_data *data;
     p101_fsm_state_t    next_state;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     (void)sink;
     data                = (struct server_data *)arg;
     data->server_socket = p101_socket(env, err, data->sets->addr_in.ss_family, SOCK_STREAM, 0);
@@ -35,7 +35,7 @@ void socket_bind(const struct p101_env *env, struct p101_error *err, void *arg, 
     in_port_t           net_port;
     p101_fsm_state_t    next_state;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     (void)sink;
     data     = (struct server_data *)arg;
     net_port = p101_htons(env, data->sets->port_in);
@@ -91,7 +91,7 @@ void socket_listen(const struct p101_env *env, struct p101_error *err, void *arg
     const struct server_data *data;
     p101_fsm_state_t          next_state;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     (void)sink;
     data = (struct server_data *)arg;
     p101_listen(env, err, data->server_socket, data->sets->backlog);
@@ -114,7 +114,7 @@ void socket_accept(const struct p101_env *env, struct p101_error *err, void *arg
     struct server_data *data;
     p101_fsm_state_t    next_state;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     (void)sink;
     accept_err = NULL;
     data       = (struct server_data *)arg;

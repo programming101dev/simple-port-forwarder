@@ -23,7 +23,7 @@ static void *copy_handler(void *arg);
 static bool  copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets);
 static bool  error_is_connection_closed(const struct p101_error *err);
 static bool  error_is_retryable(const struct p101_error *err);
-static void  shutdown_socket(const struct p101_env *env, int socket, int how);
+static void  shutdown_socket(const struct p101_env *env, struct p101_error *err, int socket, int how);
 static void  close_socket(const struct p101_env *env, struct p101_error *err, int *socket);
 static void  delay(const struct p101_env *env, struct p101_error *err, time_t min_seconds, time_t max_seconds, long min_nanoseconds, long max_nanoseconds);
 static long  generate_random_long(const struct p101_env *env, long min, long max);
@@ -40,13 +40,15 @@ void handle_connection(const struct p101_env *env, struct p101_error *err, void 
     struct copy_data    to_data;
     bool                from_started;
     bool                to_started;
+    struct p101_error  *cleanup_err;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     (void)sink;
     p101_printf(env, err, "Handing connection\n");
     data         = (struct server_data *)arg;
     from_started = false;
     to_started   = false;
+    cleanup_err  = NULL;
 
     data->forward_socket = p101_socket(env, err, data->sets->addr_out.ss_family, SOCK_STREAM, 0);
 
@@ -120,7 +122,7 @@ void handle_connection(const struct p101_env *env, struct p101_error *err, void 
         p101_pthread_cond_wait(env, err, server_cond(), server_lock());
         if(p101_error_has_error(err))
         {
-            (void)p101_pthread_mutex_unlock(env, NULL, server_lock());
+            (void)p101_pthread_mutex_unlock(env, err, server_lock());
             goto error;
         }
         p101_printf(env, err, "condition done\n");
@@ -168,21 +170,30 @@ void handle_connection(const struct p101_env *env, struct p101_error *err, void 
     goto done;
 
 error:
-    shutdown_socket(env, data->client_socket, SHUT_RDWR);
-    shutdown_socket(env, data->forward_socket, SHUT_RDWR);
+    cleanup_err = p101_error_create(false);
+    shutdown_socket(env, cleanup_err == NULL ? err : cleanup_err, data->client_socket, SHUT_RDWR);
+    shutdown_socket(env, cleanup_err == NULL ? err : cleanup_err, data->forward_socket, SHUT_RDWR);
 
     if(from_started)
     {
-        p101_pthread_join(env, NULL, from_forwarder, NULL);
+        p101_pthread_join(env, cleanup_err == NULL ? err : cleanup_err, from_forwarder, NULL);
     }
 
     if(to_started)
     {
-        p101_pthread_join(env, NULL, to_forwarder, NULL);
+        p101_pthread_join(env, cleanup_err == NULL ? err : cleanup_err, to_forwarder, NULL);
     }
 
-    close_socket(env, NULL, &data->client_socket);
-    close_socket(env, NULL, &data->forward_socket);
+    close_socket(env, cleanup_err == NULL ? err : cleanup_err, &data->client_socket);
+    close_socket(env, cleanup_err == NULL ? err : cleanup_err, &data->forward_socket);
+    if(cleanup_err != NULL)
+    {
+        if(p101_error_has_error(cleanup_err))
+        {
+            p101_fprintf(env, cleanup_err, stderr, "Connection cleanup error: %s\n", p101_error_get_message(cleanup_err));
+        }
+        p101_error_destroy(cleanup_err);
+    }
     next_state = CLEANUP;
 
 done:
@@ -217,16 +228,19 @@ static bool start_copy_thread(const struct p101_env *env, struct p101_error *err
 
 static void *copy_handler(void *arg)
 {
-    struct copy_data  *data;
-    struct p101_error *err;
-    bool               closed;
+    const struct p101_env *env;
+    struct copy_data      *data;
+    struct p101_error     *err;
+    bool                   closed;
 
     data = (struct copy_data *)arg;
+    env  = data->env;
     err  = p101_error_create(false);
 
     if(err == NULL)
     {
-        p101_fprintf(data->env, NULL, stderr, "Unable to create copy thread error object\n");
+        /* P101_ERROR_CONTRACT_ALLOW_NO_ERROR: the error object allocation itself failed. */
+        p101_fprintf(env, NULL, stderr, "Unable to create copy thread error object\n");
         goto done;
     }
 
@@ -234,11 +248,11 @@ static void *copy_handler(void *arg)
     {
         const char *closed_str;
 
-        closed = copy(data->env, err, data->to_fd, data->from_fd, data->sets);
+        closed = copy(env, err, data->to_fd, data->from_fd, data->sets);
 
         if(p101_error_has_error(err))
         {
-            p101_fprintf(data->env, err, stderr, "Copy thread error: %s\n", p101_error_get_message(err));
+            p101_fprintf(env, err, stderr, "Copy thread error: %s\n", p101_error_get_message(err));
             goto done;
         }
 
@@ -251,17 +265,17 @@ static void *copy_handler(void *arg)
             closed_str = "false";
         }
 
-        p101_printf(data->env, err, "closed %d -> %d?: %s\n", data->from_fd, data->to_fd, closed_str);
+        p101_printf(env, err, "closed %d -> %d?: %s\n", data->from_fd, data->to_fd, closed_str);
     } while(!closed);
 
 done:
-    shutdown_socket(data->env, data->to_fd, SHUT_WR);
-    p101_printf(data->env, err, "Ending thread\n");
+    shutdown_socket(env, err, data->to_fd, SHUT_WR);
+    p101_printf(env, err, "Ending thread\n");
+    server_active_threads_decrement(env);
+    p101_pthread_mutex_lock(env, err, server_lock());
+    p101_pthread_cond_signal(env, err, server_cond());
+    p101_pthread_mutex_unlock(env, err, server_lock());
     p101_error_destroy(err);
-    server_active_threads_decrement(data->env);
-    p101_pthread_mutex_lock(data->env, NULL, server_lock());
-    p101_pthread_cond_signal(data->env, NULL, server_cond());
-    p101_pthread_mutex_unlock(data->env, NULL, server_lock());
 
     return NULL;
 }
@@ -436,11 +450,11 @@ static bool error_is_retryable(const struct p101_error *err)
     return false;
 }
 
-static void shutdown_socket(const struct p101_env *env, int socket, int how)
+static void shutdown_socket(const struct p101_env *env, struct p101_error *err, int socket, int how)
 {
     if(socket != -1)
     {
-        p101_shutdown(env, NULL, socket, how);
+        p101_shutdown(env, err, socket, how);
     }
 }
 
@@ -514,12 +528,12 @@ void cleanup(const struct p101_env *env, struct p101_error *err, void *arg, stru
 {
     struct server_data *data;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     (void)sink;
     data = (struct server_data *)arg;
 
-    close_socket(env, NULL, &data->client_socket);
-    close_socket(env, NULL, &data->forward_socket);
+    close_socket(env, err, &data->client_socket);
+    close_socket(env, err, &data->forward_socket);
     close_socket(env, err, &data->server_socket);
 
     p101_fsm_decide_exit(decision);

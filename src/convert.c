@@ -27,7 +27,7 @@ in_port_t parse_in_port_t(const struct p101_env *env, struct p101_error *error, 
 {
     uint16_t parsed_value;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     parsed_value = p101_parse_uint16_t(env, error, str, 0);
 
     return parsed_value;
@@ -37,7 +37,7 @@ time_t get_time_t_min(const struct p101_env *env, struct p101_error *error)
 {
     time_t value;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
 
     if(sizeof(time_t) == sizeof(char))
     {
@@ -71,7 +71,7 @@ time_t get_time_t_max(const struct p101_env *env, struct p101_error *error)
 {
     time_t value;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
 
     if(sizeof(time_t) == sizeof(char))
     {
@@ -106,7 +106,7 @@ time_t parse_time_t(const struct p101_env *env, struct p101_error *error, time_t
     char    *endptr;
     intmax_t parsed_value;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     parsed_value = p101_strtoimax(env, error, str, &endptr, BASE_TEN);
 
     if(p101_error_has_error(error))
@@ -134,14 +134,14 @@ done:
 
 void convert_address(const struct p101_env *env, struct p101_error *error, const char *address, struct sockaddr_storage *addr)
 {
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     p101_memset(env, addr, 0, sizeof(*addr));
 
-    if(p101_inet_pton(env, NULL, AF_INET, address, &(((struct sockaddr_in *)addr)->sin_addr)) == 1)
+    if(p101_inet_pton(env, error, AF_INET, address, &(((struct sockaddr_in *)addr)->sin_addr)) == 1)
     {
         addr->ss_family = AF_INET;
     }
-    else if(p101_inet_pton(env, NULL, AF_INET6, address, &(((struct sockaddr_in6 *)addr)->sin6_addr)) == 1)
+    else if(p101_inet_pton(env, error, AF_INET6, address, &(((struct sockaddr_in6 *)addr)->sin6_addr)) == 1)
     {
         addr->ss_family = AF_INET6;
     }
@@ -156,7 +156,7 @@ void convert_address(const struct p101_env *env, struct p101_error *error, const
 
 void sockaddr_to_string(const struct p101_env *env, struct p101_error *err, const struct sockaddr_storage *addr, char *ipstr, socklen_t max_size)
 {
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
 
     if(addr->ss_family == AF_INET)
     {
