@@ -58,9 +58,15 @@ set(main_LINK_LIBRARIES
         p101_tool_event
         p101_c
         p101_convert
-        p101_posix
+        p101_cli
+        p101_io
+        p101_network
+        p101_process
+        p101_random
+        p101_sync
+        p101_thread
+        p101_time
         p101_fsm
-        p101_unix
         m
         iconv
         )

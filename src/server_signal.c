@@ -1,7 +1,7 @@
 #include "server_signal.h"
 #include "server_state.h"
 #include <p101_c/p101_string.h>
-#include <p101_posix/p101_signal.h>
+#include <p101_process/process.h>
 #include <signal.h>
 
 static void sigint_handler(int signum);

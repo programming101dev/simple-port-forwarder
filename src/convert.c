@@ -11,7 +11,7 @@
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_string.h>
 #include <p101_convert/integer.h>
-#include <p101_posix/arpa/p101_inet.h>
+#include <p101_network/network.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/socket.h>
