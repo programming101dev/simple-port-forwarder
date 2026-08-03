@@ -55,7 +55,6 @@ set(main_HEADERS
 set(main_LINK_LIBRARIES
         p101_error
         p101_env
-        p101_tool_event
         p101_c
         p101_convert
         p101_cli
