@@ -26,12 +26,34 @@ int main(int argc, char *argv[])
     p101_memset(env, &args, 0, sizeof(args));
     parse_arguments(env, err, argc, argv, &args);
 
+    if(args.show_help && p101_error_has_no_error(err))
+    {
+        usage(env, err, argv[0], EXIT_SUCCESS, NULL);
+        exit_code = EXIT_SUCCESS;
+        goto done;
+    }
+
+    if(p101_error_has_error(err))
+    {
+        usage(env, err, argv[0], EXIT_FAILURE, p101_error_get_message(err));
+        exit_code = EXIT_FAILURE;
+        goto done;
+    }
+
     if(args.verbose || args.very_verbose)
     {
         p101_env_set_tracer(env, p101_env_default_tracer);
     }
 
-    check_arguments(env, err, argv[0], &args);
+    check_arguments(env, err, &args);
+
+    if(p101_error_has_error(err))
+    {
+        usage(env, err, argv[0], EXIT_FAILURE, p101_error_get_message(err));
+        exit_code = EXIT_FAILURE;
+        goto done;
+    }
+
     p101_memset(env, &sets, 0, sizeof(sets));
     convert_arguments(env, err, &args, &sets);
 

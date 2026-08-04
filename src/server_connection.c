@@ -416,6 +416,13 @@ done:
     return closed;
 }
 
+#ifdef SIMPLE_PORT_FORWARDER_TESTING
+bool server_copy_once_for_test(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets)
+{
+    return copy(env, err, to_fd, from_fd, sets);
+}
+#endif
+
 static bool error_is_connection_closed(const struct p101_error *err)
 {
     if(p101_error_is_errno(err, EBADF))

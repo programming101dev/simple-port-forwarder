@@ -20,12 +20,12 @@ struct arguments
     char *max_bytes;
     bool  verbose;
     bool  very_verbose;
+    bool  show_help;
 };
 
-
-void           parse_arguments(const struct p101_env *env, struct p101_error *err, int argc, char *argv[], struct arguments *args);
-void           check_arguments(const struct p101_env *env, struct p101_error *err, const char *binary_name, const struct arguments *args);
-void           convert_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args, struct settings *sets);
-_Noreturn void usage(const struct p101_env *env, struct p101_error *err, const char *program_name, int exit_code, const char *message);
+void parse_arguments(const struct p101_env *env, struct p101_error *err, int argc, char *argv[], struct arguments *args);
+void check_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args);
+void convert_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args, struct settings *sets);
+void usage(const struct p101_env *env, struct p101_error *err, const char *program_name, int exit_code, const char *message);
 
 #endif    // PORT_FORWARDER_CLI_H

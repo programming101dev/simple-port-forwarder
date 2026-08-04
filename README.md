@@ -70,7 +70,14 @@ This compiles through the strict analysis pipeline: the clang-format check, clan
 
 ## **Testing**
 
-`./check.sh` runs the pre-submit gate: the format check, the strict build, the tests, and a short fuzz smoke run, with a single PASS/FAIL at the end. This program does not have `test/` or `fuzz/` trees yet, so those stages report that and move on.
+`./check.sh` runs the pre-submit gate: the format check, the strict build, and
+the tests, with a single PASS/FAIL at the end. The native test tree exercises
+byte-preserving forwarding under deliberately short chunks, half-close/EOF
+handling, and settings rejection. Run it directly with `./test.sh`.
+
+The test boundary is the forwarding engine itself. It uses local `socketpair`
+endpoints, so it neither depends on the external network nor claims to test
+router, firewall, DNS, or third-party TCP behavior.
 
 ## **Running**
 

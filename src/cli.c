@@ -2,7 +2,6 @@
 #include "convert.h"
 #include <p101_c/p101_ctype.h>
 #include <p101_c/p101_stdio.h>
-#include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <p101_cli/cli.h>
 #include <p101_convert/integer.h>
@@ -11,37 +10,39 @@
 
 #define OPTION_MESSAGE_LEN 64    // NOLINT(cppcoreguidelines-macro-to-enum,modernize-macro-to-enum)
 
-_Noreturn void usage(const struct p101_env *env, struct p101_error *err, const char *program_name, int exit_code, const char *message)
+void usage(const struct p101_env *env, struct p101_error *err, const char *program_name, int exit_code, const char *message)
 {
+    FILE *stream;
+
     P101_TRACE_SCOPE(env);
+    stream = (exit_code == EXIT_SUCCESS) ? stdout : stderr;
 
     if(message)
     {
-        p101_fprintf(env, err, stderr, "%s\n", message);
+        p101_fprintf(env, err, stream, "%s\n", message);
     }
 
     p101_fprintf(
         env,
         err,
-        stderr,
+        stream,
         "Usage: %s [-h] [-v] [-V] -l <backlog> -a <listening ip address> -p <listening port> -A <forwarding ip address> -P <forwarding port> [-s <min seconds> -S <max seconds> -n <min nanoseconds> -N <max nanoseconds> -b <min bytes> -B <max bytes>]\n",
         program_name);
-    p101_fputs(env, err, "Options:\n", stderr);
-    p101_fputs(env, err, "  -h Display this help message\n", stderr);
-    p101_fputs(env, err, "  -l <backlog> the backlog\n", stderr);
-    p101_fputs(env, err, "  -a <listening ip address> the ip address to listen to\n", stderr);
-    p101_fputs(env, err, "  -p <listening port> the port to listen to\n", stderr);
-    p101_fputs(env, err, "  -A <forwarding ip address> the ip address to forward to\n", stderr);
-    p101_fputs(env, err, "  -P <forwarding port> the port to forward to\n", stderr);
-    p101_fputs(env, err, "  -s <min seconds> minimum number of seconds to delay between packets\n", stderr);
-    p101_fputs(env, err, "  -S <max seconds> maximum number of seconds to delay between packets\n", stderr);
-    p101_fputs(env, err, "  -n <min nanoseconds> minimum number of nanoseconds to delay between packets\n", stderr);
-    p101_fputs(env, err, "  -N <max nanoseconds> minimum number of nanoseconds to delay between packets\n", stderr);
-    p101_fputs(env, err, "  -b <min bytes> minimum number of bytes to send per packet\n", stderr);
-    p101_fputs(env, err, "  -B <max bytes> maximum number of bytes to send per packet\n", stderr);
-    p101_fputs(env, err, "  -v verbose\n", stderr);
-    p101_fputs(env, err, "  -V very verbose\n", stderr);
-    p101_exit(env, exit_code);
+    p101_fputs(env, err, "Options:\n", stream);
+    p101_fputs(env, err, "  -h Display this help message\n", stream);
+    p101_fputs(env, err, "  -l <backlog> the backlog\n", stream);
+    p101_fputs(env, err, "  -a <listening ip address> the ip address to listen to\n", stream);
+    p101_fputs(env, err, "  -p <listening port> the port to listen to\n", stream);
+    p101_fputs(env, err, "  -A <forwarding ip address> the ip address to forward to\n", stream);
+    p101_fputs(env, err, "  -P <forwarding port> the port to forward to\n", stream);
+    p101_fputs(env, err, "  -s <min seconds> minimum number of seconds to delay between packets\n", stream);
+    p101_fputs(env, err, "  -S <max seconds> maximum number of seconds to delay between packets\n", stream);
+    p101_fputs(env, err, "  -n <min nanoseconds> minimum number of nanoseconds to delay between packets\n", stream);
+    p101_fputs(env, err, "  -N <max nanoseconds> minimum number of nanoseconds to delay between packets\n", stream);
+    p101_fputs(env, err, "  -b <min bytes> minimum number of bytes to send per packet\n", stream);
+    p101_fputs(env, err, "  -B <max bytes> maximum number of bytes to send per packet\n", stream);
+    p101_fputs(env, err, "  -v verbose\n", stream);
+    p101_fputs(env, err, "  -V very verbose\n", stream);
 }
 
 void parse_arguments(const struct p101_env *env, struct p101_error *err, int argc, char *argv[], struct arguments *args)
@@ -122,14 +123,16 @@ void parse_arguments(const struct p101_env *env, struct p101_error *err, int arg
             }
             case 'h':
             {
-                usage(env, err, argv[0], EXIT_SUCCESS, NULL);
+                args->show_help = true;
+                break;
             }
             case ':':
             {
                 char message[OPTION_MESSAGE_LEN];
 
                 p101_snprintf(env, err, message, sizeof(message), "Option '-%c' requires an argument.", optopt ? optopt : '?');
-                usage(env, err, argv[0], EXIT_FAILURE, message);
+                P101_ERROR_RAISE_USER(err, message, 1);
+                break;
             }
             case '?':
             {
@@ -143,64 +146,77 @@ void parse_arguments(const struct p101_env *env, struct p101_error *err, int arg
                 {
                     p101_snprintf(env, err, message, sizeof(message), "Unknown option character 0x%02X.", (unsigned)(unsigned char)optopt);
                 }
-                usage(env, err, argv[0], EXIT_FAILURE, message);
+                P101_ERROR_RAISE_USER(err, message, 1);
+                break;
             }
             default:
             {
-                usage(env, err, argv[0], EXIT_FAILURE, NULL);
+                P101_ERROR_RAISE_USER(err, "Internal error: getopt returned an unsupported option.", 1);
+                break;
             }
         }
     }
 
     if(optind < argc)
     {
-        usage(env, err, argv[0], EXIT_FAILURE, "Error: Too many arguments.");
+        P101_ERROR_RAISE_USER(err, "Error: Too many arguments.", 1);
     }
 }
 
-void check_arguments(const struct p101_env *env, struct p101_error *err, const char *binary_name, const struct arguments *args)
+void check_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args)
 {
     P101_TRACE_SCOPE(env);
 
     if(args->backlog == NULL)
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "The backlog is required.");
+        P101_ERROR_RAISE_USER(err, "The backlog is required.", 1);
+        goto done;
     }
 
     if(args->ip_address_in == NULL)
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "The listening ip address is required.");
+        P101_ERROR_RAISE_USER(err, "The listening ip address is required.", 1);
+        goto done;
     }
 
     if(args->port_in == NULL)
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "The listening port is required.");
+        P101_ERROR_RAISE_USER(err, "The listening port is required.", 1);
+        goto done;
     }
 
     if(args->ip_address_out == NULL)
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "The forwarding ip address is required.");
+        P101_ERROR_RAISE_USER(err, "The forwarding ip address is required.", 1);
+        goto done;
     }
 
     if(args->port_out == NULL)
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "The forwarding port is required.");
+        P101_ERROR_RAISE_USER(err, "The forwarding port is required.", 1);
+        goto done;
     }
 
     if((args->min_seconds == NULL && args->max_seconds != NULL) || (args->min_seconds != NULL && args->max_seconds == NULL))
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "If min-seconds is specified, max-seconds must be specified and vice versa.");
+        P101_ERROR_RAISE_USER(err, "If min-seconds is specified, max-seconds must be specified and vice versa.", 1);
+        goto done;
     }
 
     if((args->min_nanoseconds == NULL && args->max_nanoseconds != NULL) || (args->min_nanoseconds != NULL && args->max_nanoseconds == NULL))
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "If min-nanoseconds is specified, max-nanoseconds must be specified and vice versa.");
+        P101_ERROR_RAISE_USER(err, "If min-nanoseconds is specified, max-nanoseconds must be specified and vice versa.", 1);
+        goto done;
     }
 
     if((args->min_bytes == NULL && args->max_bytes != NULL) || (args->min_bytes != NULL && args->max_bytes == NULL))
     {
-        usage(env, err, binary_name, EXIT_FAILURE, "If min-bytes is specified, max-bytes must be specified and vice versa.");
+        P101_ERROR_RAISE_USER(err, "If min-bytes is specified, max-bytes must be specified and vice versa.", 1);
+        goto done;
     }
+
+done:
+    return;
 }
 
 void convert_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args, struct settings *sets)
