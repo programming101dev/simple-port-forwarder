@@ -12,6 +12,7 @@ void cleanup(const struct p101_env *env, struct p101_error *err, void *arg, stru
 struct settings;
 
 bool server_copy_once_for_test(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets);
+bool server_connection_error_is_local_for_test(const struct p101_error *err);
 #endif
 
 #endif    // PORT_FORWARDER_SERVER_CONNECTION_H

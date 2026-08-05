@@ -1,3 +1,4 @@
+#include "convert.h"
 #include "server_connection.h"
 #include "server_settings.h"
 #include "settings.h"
@@ -92,12 +93,12 @@ done:
 
 static void test_copy_preserves_all_bytes(const struct p101_env *env, struct p101_error *err)
 {
-    static const char      message[] = "short writes must not lose bytes";
-    char                   received[sizeof(message)] = {0};
-    int                    input[2]                  = {-1, -1};
-    int                    output[2]                 = {-1, -1};
-    struct settings        sets                      = default_settings();
-    bool                   closed;
+    static const char message[]                 = "short writes must not lose bytes";
+    char              received[sizeof(message)] = {0};
+    int               input[2]                  = {-1, -1};
+    int               output[2]                 = {-1, -1};
+    struct settings   sets                      = default_settings();
+    bool              closed;
 
     p101_socketpair(env, err, AF_UNIX, SOCK_STREAM, 0, input);
     check(p101_error_has_no_error(err), "create input socket pair");
@@ -202,6 +203,34 @@ static void test_settings_contract(const struct p101_env *env, struct p101_error
     p101_error_reset(err);
 }
 
+static void test_connection_error_routing(struct p101_error *err)
+{
+    P101_ERROR_RAISE_ERRNO(err, ECONNREFUSED);
+    check(server_connection_error_is_local_for_test(err), "connection refusal remains local to one client");
+    p101_error_reset(err);
+
+    P101_ERROR_RAISE_ERRNO(err, ETIMEDOUT);
+    check(server_connection_error_is_local_for_test(err), "connection timeout remains local to one client");
+    p101_error_reset(err);
+
+    P101_ERROR_RAISE_ERRNO(err, ENOMEM);
+    check(!server_connection_error_is_local_for_test(err), "process resource failure stops the server");
+    p101_error_reset(err);
+}
+
+static void test_address_conversion_falls_through_to_ipv6(const struct p101_env *env, struct p101_error *err)
+{
+    struct sockaddr_storage address;
+
+    convert_address(env, err, "::1", &address);
+    check(p101_error_has_no_error(err), "valid IPv6 address is accepted after the IPv4 probe");
+    check(address.ss_family == AF_INET6, "valid IPv6 address selects AF_INET6");
+
+    convert_address(env, err, "not-an-address", &address);
+    check(p101_error_has_error(err), "invalid address is rejected");
+    p101_error_reset(err);
+}
+
 int main(void)
 {
     struct p101_error *err    = NULL;
@@ -224,6 +253,8 @@ int main(void)
     test_copy_preserves_all_bytes(env, err);
     test_copy_reports_half_close(env, err);
     test_settings_contract(env, err);
+    test_connection_error_routing(err);
+    test_address_conversion_falls_through_to_ipv6(env, err);
     status = failures == 0 ? 0 : 1;
 
 done:

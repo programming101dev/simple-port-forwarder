@@ -36,5 +36,4 @@ struct settings
     bool very_verbose;
 };
 
-
 #endif    // PORT_FORWARDER_SETTINGS_H

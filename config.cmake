@@ -58,6 +58,7 @@ set(main_LINK_LIBRARIES
         p101_c
         p101_convert
         p101_cli
+        p101_filesystem
         p101_io
         p101_network
         p101_process

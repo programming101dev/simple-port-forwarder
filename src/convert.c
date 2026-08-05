@@ -134,24 +134,45 @@ done:
 
 void convert_address(const struct p101_env *env, struct p101_error *error, const char *address, struct sockaddr_storage *addr)
 {
+    int ipv4_result;
+    int ipv6_result;
+
     P101_TRACE_SCOPE(env);
     p101_memset(env, addr, 0, sizeof(*addr));
 
-    if(p101_inet_pton(env, error, AF_INET, address, &(((struct sockaddr_in *)addr)->sin_addr)) == 1)
+    ipv4_result = p101_inet_pton(env, error, AF_INET, address, &(((struct sockaddr_in *)addr)->sin_addr));
+    if(ipv4_result == 1)
     {
         addr->ss_family = AF_INET;
     }
-    else if(p101_inet_pton(env, error, AF_INET6, address, &(((struct sockaddr_in6 *)addr)->sin6_addr)) == 1)
-    {
-        addr->ss_family = AF_INET6;
-    }
     else
     {
-        char message[CONVERT_ERROR_MESSAGE_LEN];
+        if(ipv4_result == 0 && p101_error_is_errno(error, EINVAL))
+        {
+            p101_error_reset(error);
+        }
+        if(p101_error_has_error(error))
+        {
+            goto done;
+        }
 
-        p101_snprintf(env, error, message, sizeof(message), "%s is not an IPv4 or an IPv6 address", address);
-        P101_ERROR_RAISE_USER(error, message, 1);
+        ipv6_result = p101_inet_pton(env, error, AF_INET6, address, &(((struct sockaddr_in6 *)addr)->sin6_addr));
+        if(ipv6_result == 1)
+        {
+            addr->ss_family = AF_INET6;
+        }
+        else if(ipv6_result == 0 && p101_error_is_errno(error, EINVAL))
+        {
+            char message[CONVERT_ERROR_MESSAGE_LEN];
+
+            p101_error_reset(error);
+            p101_snprintf(env, error, message, sizeof(message), "%s is not an IPv4 or an IPv6 address", address);
+            P101_ERROR_RAISE_USER(error, message, 1);
+        }
     }
+
+done:
+    return;
 }
 
 void sockaddr_to_string(const struct p101_env *env, struct p101_error *err, const struct sockaddr_storage *addr, char *ipstr, socklen_t max_size)

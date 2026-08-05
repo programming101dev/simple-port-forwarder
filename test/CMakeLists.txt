@@ -12,6 +12,7 @@ set(P101_LIBS
         p101_error
         p101_env
         p101_c
+        p101_convert
         p101_filesystem
         p101_fsm
         p101_io
@@ -45,6 +46,7 @@ find_package(Threads REQUIRED)
 
 add_executable(test_forwarding
         test_forwarding.c
+        ../src/convert.c
         ../src/server_connection.c
         ../src/server_settings.c
         ../src/server_state.c)

@@ -23,6 +23,7 @@ static bool  start_copy_thread(const struct p101_env *env, struct p101_error *er
 static void *copy_handler(void *arg);
 static bool  copy(const struct p101_env *env, struct p101_error *err, int to_fd, int from_fd, const struct settings *sets);
 static bool  error_is_connection_closed(const struct p101_error *err);
+static bool  error_is_connection_local(const struct p101_error *err);
 static bool  error_is_retryable(const struct p101_error *err);
 static void  shutdown_socket(const struct p101_env *env, struct p101_error *err, int socket, int how);
 static void  close_socket(const struct p101_env *env, struct p101_error *err, int *socket);
@@ -195,7 +196,16 @@ error:
         }
         p101_error_destroy(cleanup_err);
     }
-    next_state = CLEANUP;
+    if(error_is_connection_local(err) && !server_exit_requested())
+    {
+        p101_fprintf(env, NULL, stderr, "Connection error: %s\n", p101_error_get_message(err));
+        p101_error_reset(err);
+        next_state = ACCEPT;
+    }
+    else
+    {
+        next_state = CLEANUP;
+    }
 
 done:
     p101_printf(env, err, "Connection handled\n");
@@ -421,6 +431,11 @@ bool server_copy_once_for_test(const struct p101_env *env, struct p101_error *er
 {
     return copy(env, err, to_fd, from_fd, sets);
 }
+
+bool server_connection_error_is_local_for_test(const struct p101_error *err)
+{
+    return error_is_connection_local(err);
+}
 #endif
 
 static bool error_is_connection_closed(const struct p101_error *err)
@@ -446,6 +461,12 @@ static bool error_is_connection_closed(const struct p101_error *err)
     }
 
     return false;
+}
+
+static bool error_is_connection_local(const struct p101_error *err)
+{
+    return (p101_error_is_errno(err, ECONNABORTED) || p101_error_is_errno(err, ECONNREFUSED) || p101_error_is_errno(err, ECONNRESET) || p101_error_is_errno(err, EHOSTUNREACH) || p101_error_is_errno(err, ENETDOWN) || p101_error_is_errno(err, ENETUNREACH) ||
+            p101_error_is_errno(err, ENOTCONN) || p101_error_is_errno(err, EPIPE) || p101_error_is_errno(err, ETIMEDOUT)) != 0;
 }
 
 static bool error_is_retryable(const struct p101_error *err)
