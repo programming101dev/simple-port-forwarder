@@ -250,8 +250,8 @@ static void *copy_handler(void *arg)
 
     if(err == NULL)
     {
-        /* P101_ERROR_CONTRACT_ALLOW_NO_ERROR: the error object allocation itself failed. */
-        p101_fprintf(env, NULL, stderr, "Unable to create copy thread error object\n");
+        /* P101_ERROR_OPTIONAL rationale: the error object allocation itself failed. */
+        p101_fprintf(env, P101_ERROR_OPTIONAL, stderr, "Unable to create copy thread error object\n");
         goto done;
     }
 
