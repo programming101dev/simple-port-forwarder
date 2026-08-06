@@ -2,7 +2,12 @@
 #include "server_state.h"
 #include "settings.h"
 #include <errno.h>
-#include <p101_network/network.h>
+#include <p101_network/arpa/p101_inet.h>
+#include <p101_network/net/p101_ethernet.h>
+#include <p101_network/net/p101_if.h>
+#include <p101_network/p101_ifaddrs.h>
+#include <p101_network/p101_netdb.h>
+#include <p101_network/sys/p101_socket.h>
 #include <sys/socket.h>
 
 void socket_create(const struct p101_env *env, struct p101_error *err, void *arg, struct p101_fsm_effect_sink *sink, struct p101_fsm_decision *decision)
